@@ -1,55 +1,30 @@
 package structs
 
 import (
-	"encoding/binary"
+	utilidades "ArchivosP1/utils" // Importa el paquete utils
 	"fmt"
 	"os"
 )
 
 // EBR representa el Extended Boot Record
 type EBR struct {
-	Ebr_mount [1]byte  //Indica si la particion esta montada o no
-	Ebr_fit   [1]byte  //BF = Best Fit, FF = First Fit, WF = Worst Fit
-	Ebr_start int32    //Byte donde inicia la particion
-	Ebr_size  int32    //Tamaño de la particion en bytes
-	Ebr_next  int32    //Byte donde inicia el siguiente EBR, -1 si no hay siguiente
-	Ebr_name  [16]byte //Nombre de la particion
+	Ebr_mount [1]byte  // Indica si la partición está montada o no
+	Ebr_fit   [1]byte  // BF = Best Fit, FF = First Fit, WF = Worst Fit
+	Ebr_start int32    // Byte donde inicia la partición
+	Ebr_size  int32    // Tamaño de la partición en bytes
+	Ebr_next  int32    // Byte donde inicia el siguiente EBR, -1 si no hay siguiente
+	Ebr_name  [16]byte // Nombre de la partición
 }
 
-// Codificar el EBR en un archivo binario
-func (e *EBR) Encode(path string, position int64) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.Seek(position, 0)
-	if err != nil {
-		return err
-	}
-	err = binary.Write(file, binary.LittleEndian, e)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("coding EBR in position %d with success.\n", position)
-	return nil
+// Encode serializa la estructura EBR en un archivo en la posición especificada
+func (e *EBR) Encode(file *os.File, position int64) error {
+	return utilidades.WriteToFile(file, position, e)
 }
 
-// DEcodificar el EBR desde un archivo binario
-func Decode(path string, position int64) (*EBR, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	_, err = file.Seek(position, 0)
-	if err != nil {
-		return nil, err
-	}
+// Decode deserializa la estructura EBR desde un archivo en la posición especificada
+func Decode(file *os.File, position int64) (*EBR, error) {
 	ebr := &EBR{}
-
-	err = binary.Read(file, binary.LittleEndian, ebr)
+	err := utilidades.ReadFromFile(file, position, ebr)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +33,7 @@ func Decode(path string, position int64) (*EBR, error) {
 	return ebr, nil
 }
 
-// Establecer los valores del EBR
+// SetEBR establece los valores del EBR
 func (e *EBR) SetEBR(fit byte, size int32, start int32, next int32, name string) {
 	fmt.Println("Estableciendo valores del EBR:")
 	fmt.Printf("Fit: %c | Size: %d | Start: %d | Next: %d | Name: %s\n", fit, size, start, next, name)
@@ -77,20 +52,20 @@ func (e *EBR) SetEBR(fit byte, size int32, start int32, next int32, name string)
 	}
 }
 
-// ReadEBR lee un EBR desde el disco en una ubicación específica.
-func ReadEBR(start int32, diskPath string) (*EBR, error) {
-	fmt.Printf("Leyendo EBR desde el disco en la posición: %d\n", start)
-	return Decode(diskPath, int64(start))
+// ReadEBR lee un EBR desde el archivo en una ubicación específica
+func ReadEBR(start int32, file *os.File) (*EBR, error) {
+	fmt.Printf("Leyendo EBR desde el archivo en la posición: %d\n", start)
+	return Decode(file, int64(start))
 }
 
-// createAndWriteEBR crea un nuevo EBR y lo escribe en el archivo de disco
-func CreateAndWriteEBR(start int32, size int32, fit byte, name string, diskPath string) error {
+// CreateAndWriteEBR crea un nuevo EBR y lo escribe en el archivo de disco
+func CreateAndWriteEBR(start int32, size int32, fit byte, name string, file *os.File) error {
 	fmt.Printf("Creando y escribiendo EBR en la posición: %d\n", start)
 
 	ebr := &EBR{}
 	ebr.SetEBR(fit, size, start, -1, name) // Establecer los valores del EBR
 
-	return ebr.Encode(diskPath, int64(start))
+	return ebr.Encode(file, int64(start))
 }
 
 // Print imprime los valores del EBR en una sola línea
@@ -126,10 +101,10 @@ func (e *EBR) CalculateNextEBRStart(extendedPartitionStart int32, extendedPartit
 }
 
 // FindLastEBR busca el último EBR en la lista enlazada de EBRs
-func FindLastEBR(start int32, diskPath string) (*EBR, error) {
+func FindLastEBR(start int32, file *os.File) (*EBR, error) {
 	fmt.Printf("Buscando el último EBR a partir de la posición: %d\n", start)
 
-	currentEBR, err := ReadEBR(start, diskPath)
+	currentEBR, err := ReadEBR(start, file)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +112,7 @@ func FindLastEBR(start int32, diskPath string) (*EBR, error) {
 	for currentEBR.Ebr_next != -1 {
 		fmt.Printf("EBR encontrado - Start: %d, Next: %d\n", currentEBR.Ebr_start, currentEBR.Ebr_next)
 
-		nextEBR, err := ReadEBR(currentEBR.Ebr_next, diskPath)
+		nextEBR, err := ReadEBR(currentEBR.Ebr_next, file)
 		if err != nil {
 			return nil, err
 		}

@@ -18,11 +18,11 @@ mkdisk -size=1500 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mi
 fdisk -size=1000 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=E -name="Extendida1"
 
 # Crear particiones lógicas hasta llenar la partición extendida
-fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=L -name="Logica1"
-fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=L -name="Logica2"
-fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=L -name="Logica3"
-fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=L -name="Logica4"
-fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk4.mia -type=L -name="Logica5"
+fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk3.mia -type=L -name="Logica1"
+fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk3.mia -type=L -name="Logica2"
+fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk3.mia -type=L -name="Logica3"
+fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk3.mia -type=L -name="Logica4"
+fdisk -size=200 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk3.mia -type=L -name="Logica5"
 #caso 3*/
 # Crear el disco
 mkdisk -size=3000 -unit=M -path=/home/keneth/Escritorio/Proyecto/Discos/Disk5.mia

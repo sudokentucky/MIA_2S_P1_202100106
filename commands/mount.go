@@ -11,39 +11,25 @@ import (
 	"strings"
 )
 
-// MOUNT estructura que representa el comando mount con sus parámetros
 type Mount struct {
 	path string
 	name string
 }
 
-/*
-	mount -path=/home/Disco1.mia -name=Part1 #id=341a
-	mount -path=/home/Disco2.mia -name=Part1 #id=342a
-	mount -path=/home/Disco3.mia -name=Part2 #id=343a
-*/
-
 // CommandMount parsea el comando mount y devuelve una instancia de MOUNT
 func ParserMount(tokens []string) (*Mount, error) {
-	cmd := &Mount{} // Crea una nueva instancia de MOUNT
+	cmd := &Mount{}
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
 	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando mount
 	re := regexp.MustCompile(`-path="[^"]+"|-path=[^\s]+|-name="[^"]+"|-name=[^\s]+`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
 	matches := re.FindAllString(args, -1)
 
-	// Itera sobre cada coincidencia encontrada
 	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
 		kv := strings.SplitN(match, "=", 2)
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("formato de parámetro inválido: %s", match)
 		}
 		key, value := strings.ToLower(kv[0]), kv[1]
-
-		// Remove quotes from value if present
 		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 			value = strings.Trim(value, "\"")
 		}
@@ -51,24 +37,20 @@ func ParserMount(tokens []string) (*Mount, error) {
 		// Switch para manejar diferentes parámetros
 		switch key {
 		case "-path":
-			// Verifica que el path no esté vacío
 			if value == "" {
 				return nil, errors.New("el path no puede estar vacío")
 			}
 			cmd.path = value
 		case "-name":
-			// Verifica que el nombre no esté vacío
 			if value == "" {
 				return nil, errors.New("el nombre no puede estar vacío")
 			}
 			cmd.name = value
 		default:
-			// Si el parámetro no es reconocido, devuelve un error
 			return nil, fmt.Errorf("parámetro desconocido: %s", key)
 		}
 	}
 
-	// Verifica que los parámetros -path y -name hayan sido proporcionados
 	if cmd.path == "" {
 		return nil, errors.New("faltan parámetros requeridos: -path")
 	}
@@ -76,7 +58,6 @@ func ParserMount(tokens []string) (*Mount, error) {
 		return nil, errors.New("faltan parámetros requeridos: -name")
 	}
 
-	// Montamos la partición
 	err := commandMount(cmd)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -96,8 +77,6 @@ func commandMount(mount *Mount) error {
 
 	// Crear una instancia de MBR
 	var mbr structures.MBR
-
-	// Deserializar la estructura MBR desde el archivo
 	err = mbr.Decode(file)
 	if err != nil {
 		fmt.Println("Error deserializando el MBR:", err)
@@ -127,14 +106,10 @@ func commandMount(mount *Mount) error {
 
 	// Guardar la partición montada en la lista de montajes globales
 	globals.MountedPartitions[idPartition] = mount.path
-
-	// Modificar la partición para indicar que está montada
 	partition.MountPartition(indexPartition, idPartition)
 
 	// Guardar la partición modificada en el MBR
 	mbr.MbrPartitions[indexPartition] = *partition
-
-	// Serializar la estructura MBR en el archivo
 	err = mbr.Encode(file)
 	if err != nil {
 		fmt.Println("Error serializando el MBR:", err)

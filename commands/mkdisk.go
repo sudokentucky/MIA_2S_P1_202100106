@@ -122,7 +122,7 @@ func ParserMkdisk(tokens []string) (*MkDisk, error) {
 
 func commandMkdisk(mkdisk *MkDisk) error {
 	// Convertir el tamaño a bytes
-	fmt.Println("========================== MKDISK ==========================")
+	fmt.Println("======================== MKDISK ==========================")
 	fmt.Println("Creating disk with size:", mkdisk.size, mkdisk.unit)
 	sizeBytes, err := utils.ConvertToBytes(mkdisk.size, mkdisk.unit)
 	if err != nil {

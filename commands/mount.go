@@ -86,6 +86,7 @@ func ParserMount(tokens []string) (*Mount, error) {
 }
 
 func commandMount(mount *Mount) error {
+	fmt.Println("========================== MOUNT ==========================")
 	// Abrir el archivo del disco
 	file, err := os.OpenFile(mount.path, os.O_RDWR, 0644)
 	if err != nil {
@@ -110,6 +111,13 @@ func commandMount(mount *Mount) error {
 		return errors.New("la partición no existe")
 	}
 
+	// Verificar si la partición ya está montada
+	for id, mountedPath := range globals.MountedPartitions {
+		if mountedPath == mount.path && strings.Contains(id, mount.name) {
+			return fmt.Errorf("la partición %s ya está montada", mount.name)
+		}
+	}
+
 	// Generar un id único para la partición
 	idPartition, err := GenerateIdPartition(mount, indexPartition)
 	if err != nil {
@@ -132,6 +140,14 @@ func commandMount(mount *Mount) error {
 		fmt.Println("Error serializando el MBR:", err)
 		return err
 	}
+
+	// Mostrar la partición montada y su ID
+	fmt.Printf("Partición %s montada correctamente con ID: %s\n", mount.name, idPartition)
+	fmt.Println("\n=== Particiones Montadas ===")
+	for id, path := range globals.MountedPartitions {
+		fmt.Printf("ID: %s | Path: %s\n", id, path)
+	}
+	fmt.Println("===========================================================")
 
 	return nil
 }

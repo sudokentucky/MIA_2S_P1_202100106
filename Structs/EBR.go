@@ -24,7 +24,17 @@ func (e *EBR) Encode(file *os.File, position int64) error {
 // Decode deserializa la estructura EBR desde un archivo en la posición especificada
 func Decode(file *os.File, position int64) (*EBR, error) {
 	ebr := &EBR{}
-	err := utilidades.ReadFromFile(file, position, ebr)
+
+	// Verificar que la posición no sea negativa y esté dentro del rango del archivo
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("error al obtener información del archivo: %v", err)
+	}
+	if position < 0 || position >= fileInfo.Size() {
+		return nil, fmt.Errorf("posición inválida para EBR: %d", position)
+	}
+
+	err = utilidades.ReadFromFile(file, position, ebr)
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +54,10 @@ func (e *EBR) SetEBR(fit byte, size int32, start int32, next int32, name string)
 	e.Ebr_size = size
 	e.Ebr_next = next
 
-	nameBytes := []byte(name)
-	if len(nameBytes) > 16 {
-		copy(e.Ebr_name[:], nameBytes[:16]) // Truncar si el nombre es mayor a 16 caracteres
-	} else {
-		copy(e.Ebr_name[:], nameBytes)
+	// Copiar el nombre al array Ebr_name y rellenar el resto con ceros
+	copy(e.Ebr_name[:], name)
+	for i := len(name); i < len(e.Ebr_name); i++ {
+		e.Ebr_name[i] = 0 // Rellenar con ceros
 	}
 }
 
@@ -89,10 +98,8 @@ func (e *EBR) CalculateNextEBRStart(extendedPartitionStart int32, extendedPartit
 
 	nextStart := e.Ebr_start + e.Ebr_size
 
-	if nextStart <= 0 {
-		return -1, fmt.Errorf("error calculando la posición del próximo EBR, resultado negativo o cero")
-	}
-	if nextStart >= extendedPartitionStart+extendedPartitionSize {
+	// Asegurarse de que nextStart esté dentro del rango de la partición extendida
+	if nextStart <= e.Ebr_start || nextStart >= extendedPartitionStart+extendedPartitionSize {
 		return -1, fmt.Errorf("error: el siguiente EBR está fuera de los límites de la partición extendida")
 	}
 
@@ -110,6 +117,10 @@ func FindLastEBR(start int32, file *os.File) (*EBR, error) {
 	}
 
 	for currentEBR.Ebr_next != -1 {
+		if currentEBR.Ebr_next < 0 {
+			// Evitar leer una posición negativa
+			return currentEBR, nil
+		}
 		fmt.Printf("EBR encontrado - Start: %d, Next: %d\n", currentEBR.Ebr_start, currentEBR.Ebr_next)
 
 		nextEBR, err := ReadEBR(currentEBR.Ebr_next, file)

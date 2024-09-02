@@ -27,6 +27,9 @@ var mapCommands = map[string]func([]string) (interface{}, error){
 	"mkfs": func(args []string) (interface{}, error) {
 		return commands.ParserMkfs(args)
 	},
+	"rep": func(args []string) (interface{}, error) {
+		return commands.ParserRep(args)
+	},
 	"help": help,
 }
 
@@ -57,6 +60,7 @@ Comandos disponibles:
 - fdisk: Maneja las particiones del disco. Ejemplo: fdisk -size=50 -unit=M -path="/home/user/disco.mia" -type=P -name="Part1"
 - mount: Monta una partición. Ejemplo: mount -path="/home/user/disco.mia" -name="Part1"
 - mkfs: Formatea una partición. Ejemplo: mkfs -id=vd1 -type=full
+- rep: Genera reportes. Ejemplo: rep -id=vd1 -path="/home/user/disco.mia" -name=mbr
 - clear: Limpia la terminal.
 - exit: Sale del programa.
 - help: Muestra este mensaje de ayuda.

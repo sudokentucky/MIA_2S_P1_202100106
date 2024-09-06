@@ -30,6 +30,27 @@ var mapCommands = map[string]func([]string) (interface{}, error){
 	"rep": func(args []string) (interface{}, error) {
 		return commands.ParserRep(args)
 	},
+	"login": func(args []string) (interface{}, error) {
+		return commands.ParserLogin(args)
+	},
+	"logout": func(args []string) (interface{}, error) {
+		return commands.ParserLogout(args)
+	},
+	"mkgrp": func(args []string) (interface{}, error) {
+		return commands.ParserMkgrp(args)
+	},
+	"rmgrp": func(args []string) (interface{}, error) {
+		return commands.ParserRmgrp(args)
+	},
+	"mkusr": func(args []string) (interface{}, error) {
+		return commands.ParserMkusr(args)
+	},
+	"rmusr": func(args []string) (interface{}, error) {
+		return commands.ParserRmusr(args)
+	},
+	"chgrp": func(args []string) (interface{}, error) {
+		return commands.ParserChgrp(args)
+	},
 	"help": help,
 }
 
@@ -60,10 +81,18 @@ Comandos disponibles:
 - fdisk: Maneja las particiones del disco. Ejemplo: fdisk -size=50 -unit=M -path="/home/user/disco.mia" -type=P -name="Part1"
 - mount: Monta una partición. Ejemplo: mount -path="/home/user/disco.mia" -name="Part1"
 - mkfs: Formatea una partición. Ejemplo: mkfs -id=vd1 -type=full
+- login: Inicia sesión en el sistema. Ejemplo: login -user=admin -pass=1234 -id=vd1
+- logout: Cierra la sesión actual. Ejemplo: logout
+- mkgrp: Crea un nuevo grupo. Ejemplo: mkgrp -name=users
+- rmgrp: Elimina un grupo existente. Ejemplo: rmgrp -name=users
+- mkusr: Crea un nuevo usuario. Ejemplo: mkusr -user=user1 -pass=user -grp=users
+- rmusr: Elimina un usuario existente. Ejemplo: rmusr -user=user1
+- chgrp: Cambia el grupo de un usuario. Ejemplo: chgrp -user=user1 -grp=users
 - rep: Genera reportes. Ejemplo: rep -id=vd1 -path="/home/user/disco.mia" -name=mbr
 - clear: Limpia la terminal.
 - exit: Sale del programa.
 - help: Muestra este mensaje de ayuda.
+
 `
 	fmt.Println(helpMessage)
 	return nil, nil

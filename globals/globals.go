@@ -9,6 +9,8 @@ import (
 // Mi carnet
 const Carnet string = "06" // 202100106
 var (
+	// UsuarioActual guarda la información del usuario logueado actualmente
+	UsuarioActual     *structures.User  = nil
 	MountedPartitions map[string]string = make(map[string]string)
 )
 
@@ -85,4 +87,17 @@ func GetMountedPartitionRep(id string) (*structures.MBR, *structures.Superblock,
 	}
 
 	return &mbr, &sb, path, nil
+}
+
+// IsLoggedIn verifica si hay un usuario logueado actualmente
+func IsLoggedIn() bool {
+	return UsuarioActual != nil && UsuarioActual.Status
+}
+
+// Logout cierra la sesión del usuario actual
+func Logout() {
+	if UsuarioActual != nil {
+		UsuarioActual.Status = false // Cambiar el estado del usuario a no logueado
+		UsuarioActual = nil          // Limpiar la información del usuario
+	}
 }

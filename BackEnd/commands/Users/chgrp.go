@@ -1,8 +1,8 @@
 package commands
 
 import (
-	structs "ArchivosP1/Structs"
-	globals "ArchivosP1/globals"
+	structs "backend/Structs"
+	globals "backend/globals"
 	"encoding/binary"
 	"fmt"
 	"os"

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import FileInput from "./FileInput";
 import Message from "./Message";
 
@@ -8,6 +8,10 @@ export default function CommandExecution() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "info" | "">("");
+  const [lineCount, setLineCount] = useState(1);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // Ref para el textarea
+  const lineCounterRef = useRef<HTMLDivElement>(null); // Ref para el contenedor del contador de líneas
 
   const showMessage = (text: string, type: "success" | "error" | "info") => {
     setMessage(text);
@@ -16,6 +20,19 @@ export default function CommandExecution() {
       setMessage("");
       setMessageType("");
     }, 5000);
+  };
+
+  // Update line count whenever inputText changes
+  useEffect(() => {
+    const lines = inputText.split("\n").length;
+    setLineCount(lines);
+  }, [inputText]);
+
+  // Sincroniza el scroll entre el textarea y el contador de líneas
+  const syncScroll = () => {
+    if (textareaRef.current && lineCounterRef.current) {
+      lineCounterRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
   };
 
   const handleExecute = useCallback(async () => {
@@ -64,25 +81,43 @@ export default function CommandExecution() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 font-inter">
+    <div className="flex flex-col min-h-screen bg-gray-100 font-inter text-gray-800">
       <div className="flex-grow flex items-center justify-center p-4">
-        <div className="w-full max-w-3xl p-8 bg-white rounded-lg shadow-md transition-all hover:shadow-xl transform hover:scale-105 duration-300 ease-in-out">
+        <div className="w-full max-w-4xl p-8 bg-white rounded-lg shadow-md transition-all hover:shadow-xl transform hover:scale-105 duration-300 ease-in-out">
           <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
-            Manejo e Implementacion de Archivos
+            Sistema de archivos ext2
           </h1>
 
-          <div className="mb-4">
+          <div className="mb-4 relative">
             <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="input-text">
               Entrada de comando o archivo de texto
             </label>
-            <textarea
-              id="input-text"
-              className="w-full h-48 p-3 border border-gray-300 rounded-md resize-none shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Ingrese comandos aquí..."
-              disabled={loading}
-            />
+
+            <div className="flex">
+              {/* Line counter */}
+              <div
+                ref={lineCounterRef} // Ref para el contador de líneas
+                className="line-numbers bg-gray-200 p-2 rounded-l-md text-sm text-right overflow-hidden"
+                style={{ height: 'auto', minHeight: '150px', maxHeight: '224px' }}
+              >
+                {Array.from({ length: lineCount }, (_, i) => i + 1).map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
+              </div>
+
+              {/* Input text area */}
+              <textarea
+                id="input-text"
+                ref={textareaRef} // Ref para el textarea
+                className="w-full min-h-56 p-2 border border-gray-300 rounded-r-md resize-none shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 text-sm overflow-y-auto"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onScroll={syncScroll} // Sincroniza el scroll con el contador de líneas
+                placeholder="Ingrese comandos aquí..."
+                disabled={loading}
+                style={{ height: "auto", minHeight: "150px", fontSize: '12px', whiteSpace: 'pre' }}
+              />
+            </div>
           </div>
 
           <div className="mb-4">
@@ -91,14 +126,15 @@ export default function CommandExecution() {
             </label>
             <textarea
               id="output-text"
-              className="w-full h-48 p-3 border border-gray-300 rounded-md resize-none bg-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full min-h-56 p-2 border border-gray-300 rounded-md resize-none bg-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
               value={outputText}
               readOnly
               placeholder="Resultado de la ejecución aparecerá aquí..."
+              style={{ fontFamily: '"Courier New", monospace', fontSize: '12px' }}
             />
           </div>
 
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center space-x-4">
             <FileInput onFileChange={setInputText} showMessage={showMessage} loading={loading} />
 
             <button
@@ -125,12 +161,17 @@ export default function CommandExecution() {
 
           <Message text={message} type={messageType} />
 
-          {loading && <div className="mt-4 text-center text-blue-500">Procesando...</div>}
+          {loading && (
+            <div className="mt-4 flex justify-center items-center">
+              <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-6 w-6 mb-4"></div>
+              <span className="text-blue-500 ml-2">Procesando...</span>
+            </div>
+          )}
         </div>
       </div>
 
       <footer className="py-4 text-center text-sm text-gray-500">
-         Keneth Lopez - 202100106
+        Keneth Lopez - 202100106
       </footer>
     </div>
   );

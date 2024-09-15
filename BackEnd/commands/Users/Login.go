@@ -72,6 +72,12 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("ya hay un usuario logueado, debe cerrar sesión primero")
 	}
 
+	// ver las particiones montadas
+	fmt.Println("Particiones montadas:")
+	for id, path := range globals.MountedPartitions {
+		fmt.Println("ID: %s | Path: %s\n", id, path)
+	}
+
 	// 2. Verificar que la partición esté montada
 	_, path, err := globals.GetMountedPartition(login.ID)
 	if err != nil {

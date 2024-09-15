@@ -4,7 +4,6 @@ import (
 	structs "backend/Structs"
 	globals "backend/globals"
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -71,7 +70,7 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock
+	// Cargar el Superblock usando el descriptor de archivo
 	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
@@ -79,8 +78,8 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	err = usersInode.Decode(file, inodeOffset)
+	inodeOffset := int64(sb.S_inode_start)
+	err = usersInode.Decode(file, inodeOffset) // Usamos el descriptor de archivo en lugar de la ruta
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -97,7 +96,13 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error eliminando el usuario '%s': %v", rmusr.User, err)
 	}
 
-	// Mensaje importante para el usuario
+	// Actualizar el inodo de users.txt
+	err = usersInode.Encode(file, inodeOffset) // Usamos el descriptor de archivo en lugar de la ruta
+	if err != nil {
+		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
+	}
+
+	// Mensaje de éxito importante para el usuario
 	fmt.Fprintf(outputBuffer, "Usuario '%s' eliminado exitosamente.\n", rmusr.User)
 	fmt.Printf("Usuario '%s' eliminado exitosamente\n", rmusr.User) // Mensaje de depuración
 

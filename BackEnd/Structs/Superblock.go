@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-const (
-	BlockSize = 64 // Tamaño de los bloques
-)
-
 type Superblock struct {
 	S_filesystem_type   int32   // Número que identifica el sistema de archivos usado
 	S_inodes_count      int32   // Número total de inodos creados
@@ -44,7 +40,7 @@ func (sb *Superblock) Decode(file *os.File, offset int64) error {
 
 // CreateUsersFile crea el archivo users.txt que contendrá la información de los usuarios
 func (sb *Superblock) CreateUsersFile(file *os.File) error {
-	// Crear el inodo raíz como carpeta
+	// ----------- Crear Inodo Raíz -----------
 	rootInode := &Inode{
 		I_uid:   1,
 		I_gid:   1,
@@ -60,13 +56,13 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	// Escribir el inodo raíz
 	err := utilidades.WriteToFile(file, int64(sb.S_first_ino), rootInode)
 	if err != nil {
-		return fmt.Errorf("failed to encode root inode: %w", err)
+		return fmt.Errorf("error al escribir el inodo raíz: %w", err)
 	}
 
 	// Actualizar bitmap de inodos
 	err = sb.UpdateBitmapInode(file)
 	if err != nil {
-		return fmt.Errorf("failed to update inode bitmap: %w", err)
+		return fmt.Errorf("error al actualizar bitmap de inodos: %w", err)
 	}
 
 	// Actualizar el contador de inodos y el puntero al primer inodo libre
@@ -77,81 +73,29 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	// Guardar el Superblock actualizado
 	err = sb.Encode(file, int64(sb.S_bm_inode_start))
 	if err != nil {
-		return fmt.Errorf("failed to update superblock after inode creation: %w", err)
+		return fmt.Errorf("error al guardar el Superblock: %w", err)
 	}
 
-	// Crear el bloque de carpeta raíz
+	// ----------- Crear Bloque Raíz (/ carpeta) -----------
 	rootBlock := &FolderBlock{
 		B_content: [4]FolderContent{
-			{B_name: [12]byte{'.'}, B_inodo: 0},
-			{B_name: [12]byte{'.', '.'}, B_inodo: 0},
-			{B_name: [12]byte{'-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-'}, B_inodo: -1},
-			{B_name: [12]byte{'-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-'}, B_inodo: -1},
+			{B_name: [12]byte{'.'}, B_inodo: 0},                                          // Apunta a sí mismo
+			{B_name: [12]byte{'.', '.'}, B_inodo: 0},                                     // Apunta al padre
+			{B_name: [12]byte{'u', 's', 'e', 'r', 's', '.', 't', 'x', 't'}, B_inodo: -1}, // Apunta a users.txt
+			{B_name: [12]byte{'-'}, B_inodo: -1},                                         // Vacío
 		},
 	}
 
-	// Escribir bloque de carpeta raíz
+	// Escribir el bloque raíz
 	err = utilidades.WriteToFile(file, int64(sb.S_first_blo), rootBlock)
 	if err != nil {
-		return fmt.Errorf("failed to encode root block: %w", err)
+		return fmt.Errorf("error al escribir el bloque raíz: %w", err)
 	}
 
-	// Crear usuarios y grupos utilizando la estructura User
-	rootUser := NewUser("1", "root", "root", "123")
-
-	// Representación en cadena de usuarios y grupos
-	usersText := fmt.Sprintf("%s\n%s\n", rootUser.ToGroupString(), rootUser.ToString())
-
-	// Crear inodo para users.txt
-	usersInode := &Inode{
-		I_uid:   1,
-		I_gid:   1,
-		I_size:  int32(len(usersText)),
-		I_atime: float32(time.Now().Unix()),
-		I_ctime: float32(time.Now().Unix()),
-		I_mtime: float32(time.Now().Unix()),
-		I_block: [15]int32{sb.S_blocks_count, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
-		I_type:  [1]byte{'1'}, // Tipo archivo
-		I_perm:  [3]byte{'7', '7', '7'},
-	}
-
-	// Escribir el inodo de users.txt
-	err = utilidades.WriteToFile(file, int64(sb.S_inode_start+int32(binary.Size(Inode{}))), usersInode)
-	if err != nil {
-		return fmt.Errorf("failed to encode users inode: %w", err)
-	}
-
-	// Actualizar el bitmap de inodos
-	err = sb.UpdateBitmapInode(file)
-	if err != nil {
-		return fmt.Errorf("failed to update inode bitmap: %w", err)
-	}
-
-	// Actualizar el contador de inodos y el puntero al primer inodo libre
-	sb.S_inodes_count++
-	sb.S_free_inodes_count--
-	sb.S_first_ino += sb.S_inode_size
-
-	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_bm_inode_start))
-	if err != nil {
-		return fmt.Errorf("failed to update superblock after users inode creation: %w", err)
-	}
-
-	// Crear bloque de users.txt
-	usersBlock := &FileBlock{}
-	copy(usersBlock.B_content[:], usersText)
-
-	// Escribir bloque de users.txt
-	err = utilidades.WriteToFile(file, int64(sb.S_first_blo), usersBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode users block: %w", err)
-	}
-
-	// Actualizar el bitmap de bloques
+	// Actualizar bitmap de bloques
 	err = sb.UpdateBitmapBlock(file)
 	if err != nil {
-		return fmt.Errorf("failed to update block bitmap: %w", err)
+		return fmt.Errorf("error al actualizar el bitmap de bloques: %w", err)
 	}
 
 	// Actualizar el contador de bloques y el puntero al primer bloque libre
@@ -162,48 +106,82 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	// Guardar el Superblock actualizado
 	err = sb.Encode(file, int64(sb.S_bm_block_start))
 	if err != nil {
-		return fmt.Errorf("failed to update superblock: %w", err)
+		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque raíz: %w", err)
+	}
+
+	// ----------- Crear Inodo para /users.txt -----------
+	// Crear usuarios y grupos utilizando la estructura User
+	rootUser := NewUser("1", "root", "root", "123")
+
+	// Representación en cadena de usuarios y grupos
+	usersText := fmt.Sprintf("%s\n%s\n", rootUser.ToGroupString(), rootUser.ToString())
+	usersInode := &Inode{
+		I_uid:   1,
+		I_gid:   1,
+		I_size:  int32(len(usersText)),
+		I_atime: float32(time.Now().Unix()),
+		I_ctime: float32(time.Now().Unix()),
+		I_mtime: float32(time.Now().Unix()),
+		I_block: [15]int32{sb.S_blocks_count, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, // Apunta al bloque de users.txt
+		I_type:  [1]byte{'1'},                                                                         // Tipo archivo
+		I_perm:  [3]byte{'7', '7', '7'},
+	}
+
+	// Escribir el inodo de users.txt
+	err = utilidades.WriteToFile(file, int64(sb.S_first_ino), usersInode)
+	if err != nil {
+		return fmt.Errorf("error al escribir el inodo de users.txt: %w", err)
+	}
+
+	// Actualizar bitmap de inodos
+	err = sb.UpdateBitmapInode(file)
+	if err != nil {
+		return fmt.Errorf("error al actualizar bitmap de inodos para users.txt: %w", err)
+	}
+
+	// Actualizar el contador de inodos y el puntero al primer inodo libre
+	sb.S_inodes_count++
+	sb.S_free_inodes_count--
+	sb.S_first_ino += sb.S_inode_size
+
+	// Guardar el Superblock actualizado
+	err = sb.Encode(file, int64(sb.S_bm_inode_start))
+	if err != nil {
+		return fmt.Errorf("error al guardar el Superblock después de la creación del inodo de users.txt: %w", err)
+	}
+
+	// ----------- Crear Bloque para users.txt -----------
+	usersBlock := &FileBlock{}
+	copy(usersBlock.B_content[:], usersText)
+
+	// Escribir el bloque de users.txt
+	err = utilidades.WriteToFile(file, int64(sb.S_first_blo), usersBlock)
+	if err != nil {
+		return fmt.Errorf("error al escribir el bloque de users.txt: %w", err)
+	}
+
+	// Actualizar el bitmap de bloques
+	err = sb.UpdateBitmapBlock(file)
+	if err != nil {
+		return fmt.Errorf("error al actualizar el bitmap de bloques para users.txt: %w", err)
+	}
+
+	// Actualizar el contador de bloques y el puntero al primer bloque libre
+	sb.S_blocks_count++
+	sb.S_free_blocks_count--
+	sb.S_first_blo += sb.S_block_size
+
+	// Guardar el Superblock actualizado
+	err = sb.Encode(file, int64(sb.S_bm_block_start))
+	if err != nil {
+		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque de users.txt: %w", err)
 	}
 
 	fmt.Println("Archivo users.txt creado correctamente.")
-	return nil
-}
-
-// UpdateBitmapInode es un método que actualiza el bitmap de inodos usando el contador de inodos
-func (sb *Superblock) UpdateBitmapInode(file *os.File) error {
-	// Usa el valor actual de S_inodes_count como índice para actualizar el bitmap
-	return UpdateInodeBitmap(file, sb, sb.S_inodes_count)
-}
-
-// UpdateInodeBitmap generaliza la actualización del bitmap de inodos
-func UpdateInodeBitmap(file *os.File, sb *Superblock, inodeIndex int32) error {
-	// Calcula el offset del bitmap de inodos basado en el índice del inodo
-	bitmapOffset := sb.S_bm_inode_start + inodeIndex
-
-	// Escribe en el archivo en la posición correspondiente para marcar el inodo como ocupado (1)
-	_, err := file.WriteAt([]byte{1}, int64(bitmapOffset))
-	if err != nil {
-		return fmt.Errorf("error actualizando el bitmap de inodos en el inodo %d: %w", inodeIndex, err)
-	}
-	return nil
-}
-
-// UpdateBitmapBlock es un método que actualiza el bitmap usando el contador de bloques
-func (sb *Superblock) UpdateBitmapBlock(file *os.File) error {
-	// Usa el valor actual de S_blocks_count como índice para actualizar el bitmap
-	return UpdateBlockBitmap(file, sb, sb.S_blocks_count)
-}
-
-// UpdateBlockBitmap generaliza la actualización del bitmap de bloques
-func UpdateBlockBitmap(file *os.File, sb *Superblock, blockIndex int32) error {
-	// Calcula el offset del bitmap de bloques basado en el índice del bloque
-	bitmapOffset := sb.S_bm_block_start + blockIndex
-
-	// Escribe en el archivo en la posición correspondiente para marcar el bloque como ocupado (1)
-	_, err := file.WriteAt([]byte{1}, int64(bitmapOffset))
-	if err != nil {
-		return fmt.Errorf("error actualizando el bitmap de bloques en el bloque %d: %w", blockIndex, err)
-	}
+	fmt.Println("\nBloques:")
+	sb.PrintBlocks(file.Name())
+	fmt.Println("\nInodos:")
+	sb.PrintInodes(file.Name())
 	return nil
 }
 
@@ -287,7 +265,7 @@ func (sb *Superblock) PrintBlocks(path string) error {
 			}
 			if inode.I_type[0] == '0' {
 				block := &FolderBlock{}
-				err := utilidades.ReadFromFile(file, int64(sb.S_block_start+(blockIndex*BlockSize)), block)
+				err := utilidades.ReadFromFile(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)), block)
 				if err != nil {
 					return fmt.Errorf("failed to decode folder block %d: %w", blockIndex, err)
 				}
@@ -295,7 +273,7 @@ func (sb *Superblock) PrintBlocks(path string) error {
 				block.Print()
 			} else if inode.I_type[0] == '1' {
 				block := &FileBlock{}
-				err := utilidades.ReadFromFile(file, int64(sb.S_block_start+(blockIndex*BlockSize)), block)
+				err := utilidades.ReadFromFile(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)), block)
 				if err != nil {
 					return fmt.Errorf("failed to decode file block %d: %w", blockIndex, err)
 				}
@@ -308,27 +286,36 @@ func (sb *Superblock) PrintBlocks(path string) error {
 	return nil
 }
 
-// GetNextFreeBlock obtiene el siguiente bloque libre y actualiza el Superblock
-func (sb *Superblock) GetNextFreeBlock(file *os.File) (int32, error) {
-	if sb.S_free_blocks_count == 0 {
-		return -1, fmt.Errorf("no hay bloques disponibles")
-	}
+// FindNextFreeBlock busca el siguiente bloque libre en el bitmap de bloques
+func (sb *Superblock) FindNextFreeBlock(file *os.File) (int32, error) {
+	// Abrir el archivo en modo lectura/escritura
+	file.Seek(int64(sb.S_bm_block_start), 0)
+	buffer := make([]byte, sb.S_blocks_count)
 
-	freeBlock := sb.S_first_blo
-	sb.S_first_blo += int32(binary.Size(FileBlock{}))
-	sb.S_free_blocks_count--
-
-	// Actualizar el bitmap de bloques
-	err := sb.UpdateBitmapBlock(file)
+	// Leer el bitmap de bloques en memoria
+	_, err := file.Read(buffer)
 	if err != nil {
-		return -1, fmt.Errorf("error actualizando el bitmap de bloques: %w", err)
+		return -1, fmt.Errorf("error leyendo bitmap de bloques: %w", err)
 	}
 
-	// Guardar el Superblock después de asignar el bloque
-	err = sb.Encode(file, int64(sb.S_bm_block_start))
-	if err != nil {
-		return -1, fmt.Errorf("error actualizando el Superblock: %w", err)
+	// Buscar el primer bloque libre (marcado con '0')
+	for i, bit := range buffer {
+		if bit == '0' {
+			// Encontramos un bloque libre, lo marcamos como ocupado ('X')
+			buffer[i] = 'X'
+			// Actualizar el bitmap de bloques en el archivo
+			_, err := file.Seek(int64(sb.S_bm_block_start), 0)
+			if err != nil {
+				return -1, fmt.Errorf("error al buscar en el archivo: %w", err)
+			}
+			_, err = file.Write(buffer)
+			if err != nil {
+				return -1, fmt.Errorf("error actualizando bitmap de bloques: %w", err)
+			}
+			// Retornar el índice del bloque libre
+			return int32(i), nil
+		}
 	}
 
-	return freeBlock, nil
+	return -1, fmt.Errorf("no hay bloques disponibles")
 }

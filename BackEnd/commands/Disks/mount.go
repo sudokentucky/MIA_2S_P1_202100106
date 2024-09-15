@@ -72,58 +72,56 @@ func ParserMount(tokens []string) (string, error) {
 }
 
 func commandMount(mount *Mount, outputBuffer *bytes.Buffer) error {
-	fmt.Fprintln(outputBuffer, "========================== MOUNT ==========================") // Mensaje importante
+	fmt.Fprintln(outputBuffer, "========================== MOUNT ==========================")
 
-	// Abrir el archivo del disco
+	// Verificar la existencia del archivo
 	file, err := os.OpenFile(mount.path, os.O_RDWR, 0644)
 	if err != nil {
-		return fmt.Errorf("error abriendo el archivo del disco: %v", err)
+		return fmt.Errorf("error abriendo el archivo del disco en el path: %s: %v", mount.path, err)
 	}
 	defer file.Close()
 
-	// Crear una instancia de MBR
+	// Leer el MBR del disco
 	var mbr structures.MBR
 	err = mbr.Decode(file)
 	if err != nil {
-		fmt.Println("Error deserializando el MBR:", err) // Mensaje de depuración
-		return err
+		return fmt.Errorf("error deserializando el MBR: %v", err)
 	}
 
 	// Buscar la partición con el nombre especificado
 	partition, indexPartition := mbr.GetPartitionByName(mount.name)
 	if partition == nil {
-		fmt.Fprintln(outputBuffer, "Error: la partición no existe") // Mensaje importante
-		return errors.New("la partición no existe")
+		return fmt.Errorf("error: la partición '%s' no existe en el disco", mount.name)
 	}
 
 	// Verificar si la partición ya está montada
 	for id, mountedPath := range globals.MountedPartitions {
 		if mountedPath == mount.path && strings.Contains(id, mount.name) {
-			return fmt.Errorf("la partición %s ya está montada", mount.name)
+			return fmt.Errorf("error: la partición '%s' ya está montada con ID: %s", mount.name, id)
 		}
 	}
 
-	// Generar un id único para la partición
+	// Generar ID único para la partición
 	idPartition, err := GenerateIdPartition(mount, indexPartition)
 	if err != nil {
-		fmt.Println("Error generando el id de partición:", err) // Mensaje de depuración
-		return err
+		return fmt.Errorf("error generando el ID de la partición: %v", err)
 	}
 
-	// Guardar la partición montada en la lista de montajes globales
+	// Guardar la partición montada en la lista de particiones montadas globales
 	globals.MountedPartitions[idPartition] = mount.path
-	partition.MountPartition(indexPartition, idPartition)
 
-	// Guardar la partición modificada en el MBR
+	// Actualizar la partición como montada en el MBR
+	partition.MountPartition(indexPartition, idPartition)
 	mbr.MbrPartitions[indexPartition] = *partition
+
+	// Guardar los cambios en el MBR de vuelta en el disco
 	err = mbr.Encode(file)
 	if err != nil {
-		fmt.Println("Error serializando el MBR:", err) // Mensaje de depuración
-		return err
+		return fmt.Errorf("error serializando el MBR de vuelta al disco: %v", err)
 	}
 
-	// Mostrar la partición montada y su ID (Mensajes importantes para el usuario)
-	fmt.Fprintf(outputBuffer, "Partición %s montada correctamente con ID: %s\n", mount.name, idPartition)
+	// Imprimir el estado de las particiones montadas
+	fmt.Fprintf(outputBuffer, "Partición '%s' montada correctamente con ID: %s\n", mount.name, idPartition)
 	fmt.Fprintln(outputBuffer, "\n=== Particiones Montadas ===")
 	for id, path := range globals.MountedPartitions {
 		fmt.Fprintf(outputBuffer, "ID: %s | Path: %s\n", id, path)

@@ -52,29 +52,3 @@ func (pb *PointerBlock) Decode(file *os.File, offset int64) error {
 	}
 	return nil
 }
-
-// assignPointerBlock asigna un nuevo bloque de datos a un PointerBlock existente
-func assignPointerBlock(file *os.File, sb *Superblock, pb *PointerBlock, blockOffset int64) (int64, error) {
-	// Buscar un apuntador libre en el bloque de apuntadores
-	freeIndex, err := pb.FindFreePointer()
-	if err != nil {
-		return -1, fmt.Errorf("error encontrando apuntador libre: %w", err)
-	}
-
-	// Obtener un nuevo bloque de datos
-	newBlock, err := sb.GetNextFreeBlock(file)
-	if err != nil {
-		return -1, fmt.Errorf("error obteniendo un nuevo bloque: %w", err)
-	}
-
-	// Asignar el nuevo bloque en el bloque de apuntadores
-	pb.B_pointers[freeIndex] = int64(newBlock) // Conversión a int64
-
-	// Guardar el bloque de apuntadores actualizado en el archivo
-	err = pb.Encode(file, blockOffset)
-	if err != nil {
-		return -1, fmt.Errorf("error guardando el bloque de apuntadores: %w", err)
-	}
-
-	return int64(newBlock), nil // Conversión a int64 en el retorno también
-}

@@ -3,12 +3,12 @@ package commands
 import (
 	structs "backend/Structs"
 	globals "backend/globals"
-	utils "backend/utils"
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -42,7 +42,6 @@ func ParserMkgrp(tokens []string) (string, error) {
 	// Ejecutar la lógica del comando mkgrp
 	err := commandMkgrp(cmd, &outputBuffer)
 	if err != nil {
-		fmt.Println("Error:", err) // Mensaje de depuración
 		return "", err
 	}
 
@@ -73,15 +72,11 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock
+	// Cargar el Superblock utilizando el descriptor del archivo
 	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
 	}
-
-	// Mostrar el estado actual del Superblock antes de agregar el grupo
-	fmt.Fprintln(outputBuffer, "Superblock antes de agregar el grupo:")
-	sb.Print() // Mensaje de depuración en consola
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
@@ -91,68 +86,25 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
 
-	// Mostrar el estado del inodo de users.txt antes de la modificación
-	fmt.Fprintln(outputBuffer, "Inodo de users.txt antes de agregar grupo:")
-	usersInode.Print() // Mensaje de depuración en consola
-
-	// Mostrar el contenido de users.txt antes de agregar el grupo
-	contenidoAntes, err := globals.ReadFileBlocks(file, sb, &usersInode)
-	if err != nil {
-		return fmt.Errorf("error leyendo contenido de users.txt antes de agregar grupo: %v", err)
-	}
-	fmt.Fprintln(outputBuffer, "Contenido de users.txt antes de agregar grupo:")
-	fmt.Fprintln(outputBuffer, contenidoAntes)
-
-	// Verificar si el grupo ya existe
+	// Verificar si el grupo ya existe en users.txt
 	_, err = globals.FindInUsersFile(file, sb, &usersInode, mkgrp.Name, "G")
 	if err == nil {
 		return fmt.Errorf("el grupo '%s' ya existe", mkgrp.Name)
 	}
 
-	// Obtener el siguiente ID disponible
-	nextGroupID, err := globals.GetNextID(file, sb, &usersInode)
+	// Obtener el siguiente ID disponible (implementamos la lógica aquí)
+	nextGroupID, err := calculateNextID(file, sb, &usersInode)
 	if err != nil {
-		return fmt.Errorf("error obteniendo el siguiente ID para el grupo: %v", err)
+		return fmt.Errorf("error calculando el siguiente ID para el grupo: %v", err)
 	}
 
 	// Crear la nueva entrada del grupo
-	newGroupEntry := fmt.Sprintf("%d,G,%s\n", nextGroupID, mkgrp.Name)
+	newGroupEntry := fmt.Sprintf("%d,G,%s", nextGroupID, mkgrp.Name)
 
-	// Verificar si hay espacio disponible en el bloque actual
-	var currentBlock structs.FileBlock
-	offset := int64(sb.S_block_start) + int64(usersInode.I_block[0])*int64(binary.Size(currentBlock))
-
-	err = utils.ReadFromFile(file, offset, &currentBlock)
+	// Agregar el grupo a users.txt utilizando la función modular de añadir o actualizar
+	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, newGroupEntry, mkgrp.Name, "G")
 	if err != nil {
-		return fmt.Errorf("error leyendo el bloque actual de users.txt: %v", err)
-	}
-
-	// Buscar el primer byte nulo en el bloque actual
-	posicionNulo := strings.IndexByte(string(currentBlock.B_content[:]), 0)
-
-	if posicionNulo != -1 {
-		// Hay espacio en el bloque actual
-		libre := 64 - (posicionNulo + len(newGroupEntry)) // 64 es el tamaño de FileBlock.B_content
-		if libre >= 0 {
-			copy(currentBlock.B_content[posicionNulo:], []byte(newGroupEntry))
-			// Escribir el bloque actualizado
-			err = utils.WriteToFile(file, offset, &currentBlock)
-			if err != nil {
-				return fmt.Errorf("error escribiendo en users.txt: %v", err)
-			}
-		} else {
-			// Si no hay suficiente espacio, crear un nuevo bloque
-			err = asignarNuevoBloqueYEscribir(file, sb, &usersInode, newGroupEntry)
-			if err != nil {
-				return fmt.Errorf("error asignando nuevo bloque para users.txt: %v", err)
-			}
-		}
-	} else {
-		// Bloque lleno, asignar un nuevo bloque
-		err = asignarNuevoBloqueYEscribir(file, sb, &usersInode, newGroupEntry)
-		if err != nil {
-			return fmt.Errorf("error asignando nuevo bloque para users.txt: %v", err)
-		}
+		return fmt.Errorf("error agregando el grupo '%s' a users.txt: %v", mkgrp.Name, err)
 	}
 
 	// Actualizar el inodo de users.txt
@@ -161,73 +113,43 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
-	// Mostrar el contenido de users.txt después de agregar el grupo
-	contenidoDespues, err := globals.ReadFileBlocks(file, sb, &usersInode)
-	if err != nil {
-		return fmt.Errorf("error leyendo contenido de users.txt después de agregar grupo: %v", err)
-	}
-	fmt.Fprintln(outputBuffer, "Contenido de users.txt después de agregar grupo:")
-	fmt.Fprintln(outputBuffer, contenidoDespues)
-
-	// Mostrar el estado del inodo de users.txt después de la modificación
-	fmt.Fprintln(outputBuffer, "Inodo de users.txt después de agregar grupo:")
-	usersInode.Print() // Mensaje de depuración en consola
-
-	// Mostrar el Superblock después de agregar el grupo
-	fmt.Fprintln(outputBuffer, "Superblock después de agregar el grupo:")
-	sb.Print() // Mensaje de depuración en consola
-
-	// Mostrar los bloques que contiene el archivo
-	err = sb.PrintBlocks(path)
-	if err != nil {
-		return fmt.Errorf("error imprimiendo los bloques: %v", err)
-	}
-
-	// Mostrar los inodos después de la modificación
-	err = sb.PrintInodes(path)
-	if err != nil {
-		return fmt.Errorf("error imprimiendo los inodos: %v", err)
-	}
-
-	fmt.Fprintln(outputBuffer, "Grupo creado exitosamente:", mkgrp.Name)
+	fmt.Fprintf(outputBuffer, "Grupo creado exitosamente: %s\n", mkgrp.Name)
 	return nil
 }
 
-// asignarNuevoBloqueYEscribir : Asigna un nuevo bloque y escribe el contenido en él
-func asignarNuevoBloqueYEscribir(file *os.File, sb *structs.Superblock, usersInode *structs.Inode, newGroupEntry string) error {
-	for i, block := range usersInode.I_block {
-		if block == -1 {
-			// Asignar un nuevo bloque
-			usersInode.I_block[i] = sb.S_first_blo
-			sb.S_free_blocks_count--
-			sb.S_first_blo++
+// calculateNextID : Calcula el siguiente ID disponible para un grupo o usuario en users.txt
+func calculateNextID(file *os.File, sb *structs.Superblock, inode *structs.Inode) (int, error) {
+	// Leer el contenido de users.txt
+	contenido, err := globals.ReadFileBlocks(file, sb, inode)
+	if err != nil {
+		return -1, fmt.Errorf("error leyendo el contenido de users.txt: %v", err)
+	}
 
-			// Escribir la nueva entrada en el nuevo bloque
-			var newFileBlock structs.FileBlock
-			copy(newFileBlock.B_content[:], []byte(newGroupEntry))
+	// Buscar el mayor ID en el archivo
+	lineas := strings.Split(contenido, "\n")
+	maxID := 0
+	for _, linea := range lineas {
+		if linea == "" {
+			continue
+		}
 
-			offset := int64(sb.S_block_start) + int64(usersInode.I_block[i])*int64(binary.Size(newFileBlock))
+		campos := strings.Split(linea, ",")
+		if len(campos) < 3 {
+			continue // Ignorar líneas mal formadas
+		}
 
-			// Escribir el nuevo bloque
-			err := utils.WriteToFile(file, offset, &newFileBlock)
-			if err != nil {
-				return fmt.Errorf("error escribiendo nuevo bloque en users.txt: %v", err)
-			}
+		// Convertir el primer campo (ID) a entero
+		id, err := strconv.Atoi(campos[0])
+		if err != nil {
+			continue // Ignorar IDs mal formados
+		}
 
-			// Actualizar el bitmap de bloques
-			err = structs.UpdateBlockBitmap(file, sb, usersInode.I_block[i])
-			if err != nil {
-				return fmt.Errorf("error actualizando bitmap de bloques: %v", err)
-			}
-
-			// Escribir el superbloque actualizado
-			err = sb.Encode(file, int64(sb.S_inode_start))
-			if err != nil {
-				return fmt.Errorf("error actualizando el superbloque: %v", err)
-			}
-
-			return nil
+		// Actualizar el maxID si encontramos uno mayor
+		if id > maxID {
+			maxID = id
 		}
 	}
-	return fmt.Errorf("no hay bloques disponibles")
+
+	// Devolver el siguiente ID disponible
+	return maxID + 1, nil
 }

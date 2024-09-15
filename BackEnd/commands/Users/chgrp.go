@@ -17,8 +17,9 @@ type CHGRP struct {
 }
 
 // ParserChgrp : Parseo de argumentos para el comando chgrp
-func ParserChgrp(tokens []string) (*CHGRP, error) {
+func ParserChgrp(tokens []string) (string, error) {
 	// Inicializar el comando CHGRP
+	var outputBuffer strings.Builder
 	cmd := &CHGRP{}
 
 	// Expresión regular para encontrar los parámetros -user y -grp
@@ -30,10 +31,10 @@ func ParserChgrp(tokens []string) (*CHGRP, error) {
 	matchesGrp := reGrp.FindString(strings.Join(tokens, " "))
 
 	if matchesUser == "" {
-		return nil, fmt.Errorf("falta el parámetro -user")
+		return "", fmt.Errorf("falta el parámetro -user")
 	}
 	if matchesGrp == "" {
-		return nil, fmt.Errorf("falta el parámetro -grp")
+		return "", fmt.Errorf("falta el parámetro -grp")
 	}
 
 	// Extraer los valores de los parámetros
@@ -41,15 +42,16 @@ func ParserChgrp(tokens []string) (*CHGRP, error) {
 	cmd.Grp = strings.SplitN(matchesGrp, "=", 2)[1]
 
 	// Ejecutar la lógica del comando chgrp
-	err := commandChgrp(cmd)
+	err := commandChgrp(cmd, &outputBuffer)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return cmd, nil
+
+	return outputBuffer.String(), nil
 }
 
 // commandChgrp : Ejecuta el comando CHGRP
-func commandChgrp(chgrp *CHGRP) error {
+func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 	// Verificar si hay una sesión activa y si el usuario es root
 	if !globals.IsLoggedIn() {
 		return fmt.Errorf("no hay ninguna sesión activa")
@@ -71,7 +73,7 @@ func commandChgrp(chgrp *CHGRP) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock
+	// Cargar el Superblock usando el descriptor de archivo
 	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
@@ -80,7 +82,7 @@ func commandChgrp(chgrp *CHGRP) error {
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
 	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	err = usersInode.Decode(file, inodeOffset)
+	err = usersInode.Decode(file, inodeOffset) // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -97,14 +99,15 @@ func commandChgrp(chgrp *CHGRP) error {
 		return fmt.Errorf("el grupo '%s' no existe o está eliminado", chgrp.Grp)
 	}
 
-	// Actualizar el grupo del usuario en users.txt
+	// Actualizar el grupo del usuario en users.txt usando AddOrUpdateInUsersFile
 	updatedUserLine := updateGroupInLine(userLine, chgrp.Grp)
-	err = globals.UpdateLineInUsersFile(file, sb, &usersInode, updatedUserLine, chgrp.User, "U")
+	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, updatedUserLine, chgrp.User, "U")
 	if err != nil {
 		return fmt.Errorf("error actualizando el grupo del usuario '%s': %v", chgrp.User, err)
 	}
 
-	fmt.Printf("El grupo del usuario '%s' ha sido cambiado exitosamente a '%s'\n", chgrp.User, chgrp.Grp)
+	// Mensaje de confirmación
+	fmt.Fprintf(outputBuffer, "El grupo del usuario '%s' ha sido cambiado exitosamente a '%s'\n", chgrp.User, chgrp.Grp)
 	return nil
 }
 

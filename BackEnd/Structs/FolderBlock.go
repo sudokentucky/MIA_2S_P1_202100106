@@ -1,31 +1,42 @@
 package structs
 
 import (
+	"backend/utils" // Asegúrate de ajustar el path del package "utils"
 	"fmt"
 	"os"
-
-	utilidades "backend/utils" // Importa el paquete utils
 )
 
-// FolderBlock representa un bloque de carpeta en el sistema de archivos
+// FolderBlock representa un bloque de carpeta con 4 contenidos
 type FolderBlock struct {
 	B_content [4]FolderContent // 4 * 16 = 64 bytes
+	// Total: 64 bytes
 }
 
-// FolderContent representa el contenido de un bloque de carpeta
+// FolderContent representa el contenido dentro de un bloque de carpeta
 type FolderContent struct {
 	B_name  [12]byte
 	B_inodo int32
+	// Total: 16 bytes
 }
 
-// Encode serializa la estructura FolderBlock en un archivo en la posición especificada
+// Encode serializa la estructura FolderBlock en un archivo binario en la posición especificada
 func (fb *FolderBlock) Encode(file *os.File, offset int64) error {
-	return utilidades.WriteToFile(file, offset, fb)
+	// Utilizamos la función WriteToFile del paquete utils
+	err := utils.WriteToFile(file, offset, fb)
+	if err != nil {
+		return fmt.Errorf("error writing FolderBlock to file: %w", err)
+	}
+	return nil
 }
 
-// Decode deserializa la estructura FolderBlock desde un archivo en la posición especificada
+// Decode deserializa la estructura FolderBlock desde un archivo binario en la posición especificada
 func (fb *FolderBlock) Decode(file *os.File, offset int64) error {
-	return utilidades.ReadFromFile(file, offset, fb)
+	// Utilizamos la función ReadFromFile del paquete utils
+	err := utils.ReadFromFile(file, offset, fb)
+	if err != nil {
+		return fmt.Errorf("error reading FolderBlock from file: %w", err)
+	}
+	return nil
 }
 
 // Print imprime los atributos del bloque de carpeta

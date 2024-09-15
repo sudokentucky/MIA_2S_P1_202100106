@@ -73,62 +73,52 @@ func ParserMkfs(tokens []string) (string, error) {
 
 func commandMkfs(mkfs *MKFS, outputBuffer *bytes.Buffer) error {
 	fmt.Fprintf(outputBuffer, "========================== MKFS ==========================\n")
+
+	// Obtener la partición montada
 	mountedPartition, partitionPath, err := global.GetMountedPartition(mkfs.id)
 	if err != nil {
-		return err
+		return fmt.Errorf("error al obtener la partición montada con ID %s: %v", mkfs.id, err)
 	}
 
+	// Abrir el archivo de la partición
 	file, err := os.OpenFile(partitionPath, os.O_RDWR, 0644)
 	if err != nil {
-		return fmt.Errorf("error abriendo el archivo de la partición: %v", err)
+		return fmt.Errorf("error abriendo el archivo de la partición en %s: %v", partitionPath, err)
 	}
-	defer file.Close() // Asegura que el archivo se cierre al final de la función
+	defer file.Close()
 
-	// Mensaje importante para el usuario
-	fmt.Fprintf(outputBuffer, "Partición montada con éxito en %s.\n", partitionPath)
-
-	// Verificar la partición montada (solo en consola para depuración)
-	fmt.Println("\nPartición montada:")
+	fmt.Fprintf(outputBuffer, "Partición montada correctamente en %s.\n", partitionPath)
+	fmt.Println("\nPartición montada:") // Mensaje de depuración
 	mountedPartition.Print()
 
 	// Calcular el valor de n
 	n := calculateN(mountedPartition)
+	fmt.Println("\nValor de n:", n) // Depuración
 
-	// Mensaje de depuración
-	fmt.Println("\nValor de n:", n)
-
-	// Inicializar un nuevo superbloque
+	// Crear el superblock
 	superBlock := createSuperBlock(mountedPartition, n)
-
-	// Verificar el superbloque (solo en consola)
-	fmt.Println("\nSuperBlock:")
+	fmt.Println("\nSuperBlock:") // Depuración
 	superBlock.Print()
 
-	// Crear los bitmaps
+	// Crear bitmaps
 	err = superBlock.CreateBitMaps(file)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creando bitmaps: %v", err)
 	}
-
-	// Mensaje importante para el usuario
 	fmt.Fprintln(outputBuffer, "Bitmaps creados correctamente.")
 
-	// Crear archivo users.txt
+	// Crear el archivo users.txt
 	err = superBlock.CreateUsersFile(file)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creando el archivo users.txt: %v", err)
 	}
-
-	// Mensaje importante para el usuario
 	fmt.Fprintln(outputBuffer, "Archivo users.txt creado correctamente.")
 
 	// Serializar el superbloque
 	err = superBlock.Encode(file, int64(mountedPartition.Part_start))
 	if err != nil {
-		return err
+		return fmt.Errorf("error al escribir el superbloque en la partición: %v", err)
 	}
-
-	// Mensaje importante para el usuario
 	fmt.Fprintln(outputBuffer, "Superbloque escrito correctamente en el disco.")
 	fmt.Fprintln(outputBuffer, "===========================================================")
 
@@ -136,22 +126,28 @@ func commandMkfs(mkfs *MKFS, outputBuffer *bytes.Buffer) error {
 }
 
 func calculateN(partition *structures.Partition) int32 {
-	// Calcular el valor de n para el superbloque
+	/*
+		numerador = (partition_montada.size - sizeof(Structs::Superblock)
+		denrominador base = (4 + sizeof(Structs::Inodes) + 3 * sizeof(Structs::Fileblock))
+		n = floor(numerador / denrominador)
+	*/
+
 	numerator := int(partition.Part_size) - binary.Size(structures.Superblock{})
-	denominator := 4 + binary.Size(structures.Inode{}) + 3*binary.Size(structures.FileBlock{}) // Todos los bloques tienen el mismo tamaño
+	denominator := 4 + binary.Size(structures.Inode{}) + 3*binary.Size(structures.FileBlock{}) // No importa que bloque poner, ya que todos tienen el mismo tamaño
 	n := math.Floor(float64(numerator) / float64(denominator))
 
-	// Mensaje de depuración
-	fmt.Println("Valor de n calculado:", int32(n))
 	return int32(n)
 }
 
 func createSuperBlock(partition *structures.Partition, n int32) *structures.Superblock {
 	// Calcular punteros de las estructuras
+	// Bitmaps
 	bm_inode_start := partition.Part_start + int32(binary.Size(structures.Superblock{}))
-	bm_block_start := bm_inode_start + n
-	inode_start := bm_block_start + (3 * n) // Puntero para los inodos
-	block_start := inode_start + (int32(binary.Size(structures.Inode{})) * n)
+	bm_block_start := bm_inode_start + n // n indica la cantidad de inodos, solo la cantidad para ser representada en un bitmap
+	// Inodos
+	inode_start := bm_block_start + (3 * n) // 3*n indica la cantidad de bloques, se multiplica por 3 porque se tienen 3 tipos de bloques
+	// Bloques
+	block_start := inode_start + (int32(binary.Size(structures.Inode{})) * n) // n indica la cantidad de inodos, solo que aquí indica la cantidad de estructuras Inode
 
 	// Crear un nuevo superbloque
 	superBlock := &structures.Superblock{
@@ -173,8 +169,5 @@ func createSuperBlock(partition *structures.Partition, n int32) *structures.Supe
 		S_inode_start:       inode_start,
 		S_block_start:       block_start,
 	}
-
-	// Mensaje de depuración
-	fmt.Println("Superbloque creado con éxito.")
 	return superBlock
 }

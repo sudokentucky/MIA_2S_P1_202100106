@@ -4,7 +4,6 @@ import (
 	structs "backend/Structs"
 	globals "backend/globals"
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -18,6 +17,7 @@ type MKUSR struct {
 	Grp  string
 }
 
+// validateParamLength : Valida que los parámetros no excedan una longitud máxima
 func validateParamLength(param string, maxLength int, paramName string) error {
 	if len(param) > maxLength {
 		return fmt.Errorf("%s debe tener un máximo de %d caracteres", paramName, maxLength)
@@ -72,7 +72,6 @@ func ParserMkusr(tokens []string) (string, error) {
 	// Ejecutar la lógica del comando mkusr
 	err := commandMkusr(cmd, &outputBuffer)
 	if err != nil {
-		fmt.Println("Error:", err) // Mensaje de depuración
 		return "", err
 	}
 
@@ -111,55 +110,46 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	err = usersInode.Decode(file, inodeOffset)
+	inodeOffset := int64(sb.S_inode_start)
+	err = usersInode.Decode(file, inodeOffset) // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
 
-	// Verificar si el grupo y usuario existen
+	// Verificar si el grupo existe
 	_, err = globals.FindInUsersFile(file, sb, &usersInode, mkusr.Grp, "G")
 	if err != nil {
 		return fmt.Errorf("el grupo '%s' no existe", mkusr.Grp)
 	}
 
+	// Verificar si el usuario ya existe
 	_, err = globals.FindInUsersFile(file, sb, &usersInode, mkusr.User, "U")
 	if err == nil {
 		return fmt.Errorf("el usuario '%s' ya existe", mkusr.User)
 	}
 
 	// Obtener el siguiente ID disponible
-	nextUserID, err := globals.GetNextID(file, sb, &usersInode)
+	nextUserID, err := calculateNextID(file, sb, &usersInode)
 	if err != nil {
-		return fmt.Errorf("error obteniendo el siguiente ID para el usuario: %v", err)
+		return fmt.Errorf("error calculando el siguiente ID para el usuario: %v", err)
 	}
 
 	// Crear una nueva entrada de usuario
-	newUserEntry := fmt.Sprintf("%d,U,%s,%s,%s\n", nextUserID, mkusr.Grp, mkusr.User, mkusr.Pass)
+	newUserEntry := fmt.Sprintf("%d,U,%s,%s,%s", nextUserID, mkusr.Grp, mkusr.User, mkusr.Pass)
 
-	// Agregar la entrada al archivo users.txt, actualizando bloques e inodos
-	err = globals.AddToUsersFile(file, sb, &usersInode, newUserEntry)
+	// Agregar la entrada al archivo users.txt
+	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, newUserEntry, mkusr.User, "U")
 	if err != nil {
 		return fmt.Errorf("error agregando el usuario '%s' a users.txt: %v", mkusr.User, err)
 	}
 
-	// Actualizar el inodo de users.txt en el archivo
-	err = usersInode.Encode(file, inodeOffset)
+	// Actualizar el inodo de users.txt
+	err = usersInode.Encode(file, inodeOffset) // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
-	// Actualizar el Superblock en el archivo
-	err = sb.Encode(file, int64(sb.S_inode_start))
-	if err != nil {
-		return fmt.Errorf("error actualizando el Superblock: %v", err)
-	}
-
-	// Mostrar el Superblock después de agregar el usuario
-	fmt.Fprintln(outputBuffer, "\nSuperblock después de agregar el usuario:")
-	sb.Print() // Mensaje de depuración en consola
-
-	// Mensaje de éxito importante
+	// Mostrar mensaje de éxito importante
 	fmt.Fprintf(outputBuffer, "Usuario '%s' agregado exitosamente al grupo '%s'\n", mkusr.User, mkusr.Grp)
 
 	return nil

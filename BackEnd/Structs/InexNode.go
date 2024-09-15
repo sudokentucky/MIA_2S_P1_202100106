@@ -1,34 +1,41 @@
 package structs
 
 import (
+	"backend/utils" // Asegúrate de ajustar el path del package "utils"
 	"fmt"
 	"os"
 	"time"
-
-	utilidades "backend/utils" // Importa el paquete utils
 )
 
-// Inode representa un nodo de índice en el sistema de archivos
 type Inode struct {
-	I_uid   int32     // ID del usuario propietario del archivo o carpeta
-	I_gid   int32     // ID del grupo al que pertenece el archivo o carpeta
-	I_size  int32     // Tamaño del archivo en bytes
-	I_atime float32   // Última fecha que se leyó el inodo sin modificarlo "02/01/2006 15:04"
-	I_ctime float32   // Fecha en que se creó el inodo "02/01/2006 15:04"
-	I_mtime float32   // Última fecha en la que se modifica el inodo "02/01/2006 15:04"
-	I_block [15]int32 // -1 si no están usados. Los valores del arreglo son: primeros 12 -> bloques directo; 13 -> bloque simple indirecto; 14 -> bloque doble indirecto; 15 -> bloque triple indirecto
-	I_type  [1]byte   // 1 -> archivo; 0 -> carpeta
-	I_perm  [3]byte   // Permisos del usuario o carpeta
+	I_uid   int32
+	I_gid   int32
+	I_size  int32
+	I_atime float32
+	I_ctime float32
+	I_mtime float32
+	I_block [15]int32 // 12 bloques directos, 1 indirecto simple, 1 indirecto doble, 1 indirecto triple
+	I_type  [1]byte
+	I_perm  [3]byte
+	// Total: 88 bytes
 }
 
-// Encode serializa la estructura Inode en un archivo en la posición especificada
 func (inode *Inode) Encode(file *os.File, offset int64) error {
-	return utilidades.WriteToFile(file, offset, inode)
+	// Utilizamos la función WriteToFile del paquete utils
+	err := utils.WriteToFile(file, offset, inode)
+	if err != nil {
+		return fmt.Errorf("error writing Inode to file: %w", err)
+	}
+	return nil
 }
 
-// Decode deserializa la estructura Inode desde un archivo en la posición especificada
 func (inode *Inode) Decode(file *os.File, offset int64) error {
-	return utilidades.ReadFromFile(file, offset, inode)
+	// Utilizamos la función ReadFromFile del paquete utils
+	err := utils.ReadFromFile(file, offset, inode)
+	if err != nil {
+		return fmt.Errorf("error reading Inode from file: %w", err)
+	}
+	return nil
 }
 
 // Print imprime los atributos del inodo

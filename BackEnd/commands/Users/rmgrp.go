@@ -4,7 +4,6 @@ import (
 	structs "backend/Structs"
 	globals "backend/globals"
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -58,7 +57,7 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("solo el usuario root puede ejecutar este comando")
 	}
 
-	// Verificar que la partición está montada
+	// Verificar que la partición esté montada
 	_, path, err := globals.GetMountedPartition(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se puede encontrar la partición montada: %v", err)
@@ -79,8 +78,8 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	err = usersInode.Decode(file, inodeOffset)
+	inodeOffset := int64(sb.S_inode_start)
+	err = usersInode.Decode(file, inodeOffset) // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -104,7 +103,7 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 	}
 
 	// Actualizar el inodo de users.txt en el archivo
-	err = usersInode.Encode(file, inodeOffset)
+	err = usersInode.Encode(file, inodeOffset) // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
@@ -117,23 +116,7 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 	fmt.Fprintln(outputBuffer, "\nContenido de users.txt después de eliminar el grupo y usuarios:")
 	fmt.Fprintln(outputBuffer, contenido)
 
-	// Mostrar el Superblock después de la eliminación
-	fmt.Fprintln(outputBuffer, "\nSuperblock después de eliminar el grupo:")
-	sb.Print() // Mensaje de depuración en consola
-
-	// Mostrar los bloques después de la eliminación
-	err = sb.PrintBlocks(path)
-	if err != nil {
-		return fmt.Errorf("error imprimiendo los bloques del sistema: %v", err)
-	}
-
-	// Mostrar inodos después de la eliminación
-	err = sb.PrintInodes(path)
-	if err != nil {
-		return fmt.Errorf("error imprimiendo los inodos del sistema: %v", err)
-	}
-
-	// Mensaje de éxito importante para el usuario
+	// Mostrar mensaje de éxito
 	fmt.Fprintf(outputBuffer, "Grupo '%s' eliminado exitosamente, junto con sus usuarios.\n", rmgrp.Name)
 
 	return nil
@@ -141,6 +124,7 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 
 // RemoveUsersFromGroup : Elimina los usuarios asociados a un grupo
 func RemoveUsersFromGroup(file *os.File, sb *structs.Superblock, usersInode *structs.Inode, groupName string) error {
+	// Leer el contenido de users.txt
 	contenido, err := globals.ReadFileBlocks(file, sb, usersInode)
 	if err != nil {
 		return fmt.Errorf("error leyendo el contenido de users.txt: %v", err)

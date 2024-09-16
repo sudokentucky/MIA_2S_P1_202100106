@@ -1,71 +1,190 @@
 package commands
 
 import (
+	structures "backend/Structs"
+	global "backend/globals"
+	utils "backend/utils"
+	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-// MKFILE : Estructura para el comando MKFILE
+// MKFILE estructura que representa el comando mkfile con sus parámetros
 type MKFILE struct {
-	Path string
-	Size int
-	Cont string
-	R    bool
+	path string // Ruta del archivo
+	r    bool   // Opción recursiva
+	size int    // Tamaño del archivo
+	cont string // Contenido del archivo
 }
 
-// ParserMkfile : Parseo de argumentos para el comando mkfile
-func ParserMkfile(tokens []string) (*MKFILE, error) {
-	cmd := &MKFILE{Size: 0, R: false} // Valores predeterminados
+// ParserMkfile parsea el comando mkfile y devuelve una instancia de MKFILE
+func ParserMkfile(tokens []string) (string, error) {
+	cmd := &MKFILE{} // Crea una nueva instancia de MKFILE
 
-	// Expresión regular para encontrar los parámetros
-	rePath := regexp.MustCompile(`-path="[^\"]+"|-path=[^\s]+`)
-	reSize := regexp.MustCompile(`-size=[^\s]+`)
-	reCont := regexp.MustCompile(`-cont="[^\"]+"|-cont=[^\s]+`)
-	reR := regexp.MustCompile(`-r`)
+	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
+	args := strings.Join(tokens, " ")
+	// Expresión regular para encontrar los parámetros del comando mkfile
+	re := regexp.MustCompile(`-path="[^"]+"|-path=[^\s]+|-r|-size=\d+|-cont="[^"]+"|-cont=[^\s]+`)
+	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
+	matches := re.FindAllString(args, -1)
 
-	// Extraer los valores de los parámetros
-	matchesPath := rePath.FindString(strings.Join(tokens, " "))
-	matchesSize := reSize.FindString(strings.Join(tokens, " "))
-	matchesCont := reCont.FindString(strings.Join(tokens, " "))
-	matchesR := reR.FindString(strings.Join(tokens, " "))
-
-	// Verificar que se proporcione el parámetro -path
-	if matchesPath == "" {
-		return nil, fmt.Errorf("falta el parámetro -path")
-	}
-	cmd.Path = strings.SplitN(matchesPath, "=", 2)[1]
-
-	// Verificar el parámetro -size
-	if matchesSize != "" {
-		size, err := strconv.Atoi(strings.SplitN(matchesSize, "=", 2)[1])
-		if err != nil || size < 0 {
-			return nil, fmt.Errorf("el parámetro -size debe ser un entero positivo")
+	// Verificar que todos los tokens fueron reconocidos por la expresión regular
+	if len(matches) != len(tokens) {
+		// Identificar el parámetro inválido
+		for _, token := range tokens {
+			if !re.MatchString(token) {
+				return "", fmt.Errorf("parámetro inválido: %s", token)
+			}
 		}
-		cmd.Size = size
 	}
 
-	// Verificar el parámetro -cont
-	if matchesCont != "" {
-		cmd.Cont = strings.SplitN(matchesCont, "=", 2)[1]
+	// Itera sobre cada coincidencia encontrada
+	for _, match := range matches {
+		// Divide cada parte en clave y valor usando "=" como delimitador
+		kv := strings.SplitN(match, "=", 2)
+		key := strings.ToLower(kv[0])
+		var value string
+		if len(kv) == 2 {
+			value = kv[1]
+		}
+
+		// Remove quotes from value if present
+		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+			value = strings.Trim(value, "\"")
+		}
+
+		// Switch para manejar diferentes parámetros
+		switch key {
+		case "-path":
+			// Verifica que el path no esté vacío
+			if value == "" {
+				return "", errors.New("el path no puede estar vacío")
+			}
+			cmd.path = value
+		case "-r":
+			// Establece el valor de r a true
+			cmd.r = true
+		case "-size":
+			// Convierte el valor del tamaño a un entero
+			size, err := strconv.Atoi(value)
+			if err != nil || size < 0 {
+				return "", errors.New("el tamaño debe ser un número entero no negativo")
+			}
+			cmd.size = size
+		case "-cont":
+			// Verifica que el contenido no esté vacío
+			if value == "" {
+				return "", errors.New("el contenido no puede estar vacío")
+			}
+			cmd.cont = value
+		default:
+			// Si el parámetro no es reconocido, devuelve un error
+			return "", fmt.Errorf("parámetro desconocido: %s", key)
+		}
 	}
 
-	// Verificar el parámetro -r
-	if matchesR != "" {
-		cmd.R = true
+	// Verifica que el parámetro -path haya sido proporcionado
+	if cmd.path == "" {
+		return "", errors.New("faltan parámetros requeridos: -path")
 	}
 
-	// Ejecutar la lógica del comando mkfile
+	// Si no se proporcionó el tamaño, se establece por defecto a 0
+	if cmd.size == 0 {
+		cmd.size = 0
+	}
+
+	// Si no se proporcionó el contenido, se establece por defecto a ""
+	if cmd.cont == "" {
+		cmd.cont = ""
+	}
+
+	// Crear el archivo con los parámetros proporcionados
 	err := commandMkfile(cmd)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return cmd, nil
+
+	return fmt.Sprintf("MKFILE: Archivo %s creado correctamente.", cmd.path), nil // Devuelve el comando MKFILE creado
 }
 
-// commandMkfile : Ejecuta el comando MKFILE
+// Función ficticia para crear el archivo (debe ser implementada)
 func commandMkfile(mkfile *MKFILE) error {
-	// Verificar si hay una sesión activa y si el usuario tiene permisos
+	// Verificar si hay un usuario logueado
+	if !global.IsLoggedIn() {
+		return fmt.Errorf("no hay un usuario logueado")
+	}
+
+	// Obtener el ID de la partición desde el usuario logueado
+	idPartition := global.UsuarioActual.Id
+
+	// Obtener la partición montada asociada al usuario logueado
+	partitionSuperblock, mountedPartition, partitionPath, err := global.GetMountedPartitionSuperblock(idPartition)
+	if err != nil {
+		return fmt.Errorf("error al obtener la partición montada: %w", err)
+	}
+
+	// Generar el contenido del archivo si no se proporcionó
+	if mkfile.cont == "" {
+		mkfile.cont = generateContent(mkfile.size)
+	}
+
+	// Abrir el archivo de partición para operar sobre él
+	file, err := os.OpenFile(partitionPath, os.O_RDWR, 0666)
+	if err != nil {
+		return fmt.Errorf("error al abrir el archivo de partición: %w", err)
+	}
+	defer file.Close() // Cerrar el archivo cuando ya no sea necesario
+
+	// Crear el archivo usando el archivo de partición abierto
+	err = createFile(mkfile.path, mkfile.size, mkfile.cont, partitionSuperblock, file, mountedPartition)
+	if err != nil {
+		return fmt.Errorf("error al crear el archivo: %w", err) // Devuelve el error correctamente
+	}
+
+	return nil
+}
+
+// generateContent genera una cadena de números del 0 al 9 hasta cumplir el tamaño ingresado
+func generateContent(size int) string {
+	content := ""
+	for len(content) < size {
+		content += "0123456789"
+	}
+	return content[:size] // Recorta la cadena al tamaño exacto
+}
+
+// createFile ahora usa el archivo de partición ya abierto
+func createFile(filePath string, size int, content string, sb *structures.Superblock, file *os.File, mountedPartition *structures.Partition) error {
+	fmt.Println("\nCreando archivo:", filePath)
+
+	parentDirs, destDir := utils.GetParentDirectories(filePath)
+	fmt.Println("\nDirectorios padres:", parentDirs)
+	fmt.Println("Directorio destino:", destDir)
+
+	// Obtener contenido por chunks
+	chunks := utils.SplitStringIntoChunks(content)
+	fmt.Println("\nChunks del contenido:", chunks)
+
+	// Crear el archivo usando el archivo de partición abierto
+	err := sb.CreateFile(file, parentDirs, destDir, size, chunks)
+	if err != nil {
+		return fmt.Errorf("error al crear el archivo: %w", err)
+	}
+
+	// Imprimir inodos y bloques
+	fmt.Println("\nInodos del archivo:")
+	sb.PrintInodes(file.Name())
+	fmt.Println("\nBloques de datos del archivo:")
+	sb.PrintBlocks(file.Name())
+
+	// Serializar el superbloque en el archivo de partición abierto
+	err = sb.Encode(file, int64(mountedPartition.Part_start))
+	if err != nil {
+		return fmt.Errorf("error al serializar el superbloque: %w", err)
+	}
+
 	return nil
 }

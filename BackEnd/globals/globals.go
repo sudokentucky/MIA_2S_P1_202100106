@@ -14,6 +14,45 @@ var (
 	MountedPartitions map[string]string = make(map[string]string)
 )
 
+// GetMountedPartitionSuperblock obtiene el SuperBlock de la partición montada con el id especificado
+func GetMountedPartitionSuperblock(id string) (*structures.Superblock, *structures.Partition, string, error) {
+	// Obtener el path de la partición montada
+	path := MountedPartitions[id]
+	if path == "" {
+		return nil, nil, "", errors.New("la partición no está montada")
+	}
+	//Abrir el archivo para leer el MBR
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	// Crear una instancia de MBR
+	var mbr structures.MBR
+
+	// Deserializar la estructura MBR desde un archivo binario
+	err = mbr.Decode(file)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	// Buscar la partición con el id especificado
+	partition, err := mbr.GetPartitionByID(id)
+	if partition == nil {
+		return nil, nil, "", err
+	}
+
+	// Crear una instancia de SuperBlock
+	var sb structures.Superblock
+
+	// Deserializar la estructura SuperBlock desde un archivo binario
+	err = sb.Decode(file, int64(partition.Part_start))
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	return &sb, partition, path, nil
+}
+
 // GetMountedPartition obtiene la partición montada con el id especificado
 func GetMountedPartition(id string) (*structures.Partition, string, error) {
 	// Obtener el path de la partición montada

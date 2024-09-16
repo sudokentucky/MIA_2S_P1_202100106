@@ -49,8 +49,8 @@ func ParserMkgrp(tokens []string) (string, error) {
 	return outputBuffer.String(), nil
 }
 
-// commandMkgrp : Ejecuta el comando MKGRP con mensajes capturados en el buffer
 func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
+	fmt.Fprintln(outputBuffer, "======================= MKGRP =======================")
 	// Verificar si hay una sesión activa y si el usuario es root
 	if !globals.IsLoggedIn() {
 		return fmt.Errorf("no hay ninguna sesión activa")
@@ -92,19 +92,19 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("el grupo '%s' ya existe", mkgrp.Name)
 	}
 
-	// Obtener el siguiente ID disponible (implementamos la lógica aquí)
+	// Obtener el siguiente ID disponible para el nuevo grupo
 	nextGroupID, err := calculateNextID(file, sb, &usersInode)
 	if err != nil {
-		return fmt.Errorf("error calculando el siguiente ID para el grupo: %v", err)
+		return fmt.Errorf("error calculando el siguiente ID: %v", err)
 	}
 
-	// Crear la nueva entrada del grupo
+	// Crear la nueva entrada de grupo con el siguiente ID
 	newGroupEntry := fmt.Sprintf("%d,G,%s", nextGroupID, mkgrp.Name)
 
-	// Agregar el grupo a users.txt utilizando la función modular de añadir o actualizar
-	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, newGroupEntry, mkgrp.Name, "G")
+	// Usar la función modular para crear el grupo en users.txt
+	err = globals.AddEntryToUsersFile(file, sb, &usersInode, newGroupEntry, mkgrp.Name, "G")
 	if err != nil {
-		return fmt.Errorf("error agregando el grupo '%s' a users.txt: %v", mkgrp.Name, err)
+		return fmt.Errorf("error creando el grupo '%s': %v", mkgrp.Name, err)
 	}
 
 	// Actualizar el inodo de users.txt
@@ -114,6 +114,7 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 	}
 
 	fmt.Fprintf(outputBuffer, "Grupo creado exitosamente: %s\n", mkgrp.Name)
+	fmt.Fprintf(outputBuffer, "===========================================================")
 	return nil
 }
 

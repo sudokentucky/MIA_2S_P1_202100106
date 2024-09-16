@@ -71,7 +71,7 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	sb.S_first_ino += sb.S_inode_size
 
 	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_bm_inode_start))
+	err = sb.Encode(file, int64(sb.S_first_ino))
 	if err != nil {
 		return fmt.Errorf("error al guardar el Superblock: %w", err)
 	}
@@ -79,10 +79,10 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	// ----------- Crear Bloque Raíz (/ carpeta) -----------
 	rootBlock := &FolderBlock{
 		B_content: [4]FolderContent{
-			{B_name: [12]byte{'.'}, B_inodo: 0},                                          // Apunta a sí mismo
-			{B_name: [12]byte{'.', '.'}, B_inodo: 0},                                     // Apunta al padre
-			{B_name: [12]byte{'u', 's', 'e', 'r', 's', '.', 't', 'x', 't'}, B_inodo: -1}, // Apunta a users.txt
-			{B_name: [12]byte{'-'}, B_inodo: -1},                                         // Vacío
+			{B_name: [12]byte{'.'}, B_inodo: 0},                                                         // Apunta a sí mismo
+			{B_name: [12]byte{'.', '.'}, B_inodo: 0},                                                    // Apunta al padre
+			{B_name: [12]byte{'u', 's', 'e', 'r', 's', '.', 't', 'x', 't'}, B_inodo: sb.S_inodes_count}, // Apunta a users.txt
+			{B_name: [12]byte{'-'}, B_inodo: -1},                                                        // Vacío
 		},
 	}
 
@@ -104,7 +104,7 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	sb.S_first_blo += sb.S_block_size
 
 	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_bm_block_start))
+	err = sb.Encode(file, int64(sb.S_first_blo))
 	if err != nil {
 		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque raíz: %w", err)
 	}
@@ -145,7 +145,7 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	sb.S_first_ino += sb.S_inode_size
 
 	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_bm_inode_start))
+	err = sb.Encode(file, int64(sb.S_first_ino))
 	if err != nil {
 		return fmt.Errorf("error al guardar el Superblock después de la creación del inodo de users.txt: %w", err)
 	}
@@ -172,12 +172,14 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	sb.S_first_blo += sb.S_block_size
 
 	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_bm_block_start))
+	err = sb.Encode(file, int64(sb.S_first_blo))
 	if err != nil {
 		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque de users.txt: %w", err)
 	}
 
 	fmt.Println("Archivo users.txt creado correctamente.")
+	fmt.Println("Superbloque después de la creación de users.txt:")
+	sb.Print()
 	fmt.Println("\nBloques:")
 	sb.PrintBlocks(file.Name())
 	fmt.Println("\nInodos:")
@@ -286,36 +288,39 @@ func (sb *Superblock) PrintBlocks(path string) error {
 	return nil
 }
 
-// FindNextFreeBlock busca el siguiente bloque libre en el bitmap de bloques
 func (sb *Superblock) FindNextFreeBlock(file *os.File) (int32, error) {
-	// Abrir el archivo en modo lectura/escritura
-	file.Seek(int64(sb.S_bm_block_start), 0)
-	buffer := make([]byte, sb.S_blocks_count)
-
-	// Leer el bitmap de bloques en memoria
-	_, err := file.Read(buffer)
+	// Mover el puntero al inicio del bitmap de bloques
+	_, err := file.Seek(int64(sb.S_bm_block_start), 0)
 	if err != nil {
-		return -1, fmt.Errorf("error leyendo bitmap de bloques: %w", err)
+		return -1, fmt.Errorf("error buscando el inicio del bitmap de bloques: %w", err)
 	}
 
-	// Buscar el primer bloque libre (marcado con '0')
+	// Leer el bitmap de bloques en memoria
+	buffer := make([]byte, sb.S_free_blocks_count)
+	_, err = file.Read(buffer)
+	if err != nil {
+		return -1, fmt.Errorf("error leyendo el bitmap de bloques: %w", err)
+	}
+
+	// Buscar el primer bloque libre ('0')
 	for i, bit := range buffer {
-		if bit == '0' {
-			// Encontramos un bloque libre, lo marcamos como ocupado ('X')
-			buffer[i] = 'X'
-			// Actualizar el bitmap de bloques en el archivo
-			_, err := file.Seek(int64(sb.S_bm_block_start), 0)
-			if err != nil {
-				return -1, fmt.Errorf("error al buscar en el archivo: %w", err)
+		if bit == FreeBlock {
+			// Bloque libre encontrado
+			buffer[i] = OccupiedBlock
+
+			// Actualizar el bitmap en el archivo
+			if err := sb.updateBitmap(file, sb.S_bm_block_start, int32(i), OccupiedBlock); err != nil {
+				return -1, fmt.Errorf("error actualizando el bitmap de bloques: %w", err)
 			}
-			_, err = file.Write(buffer)
-			if err != nil {
-				return -1, fmt.Errorf("error actualizando bitmap de bloques: %w", err)
-			}
-			// Retornar el índice del bloque libre
+
+			// Log opcional para confirmar el bloque asignado
+			fmt.Printf("Bloque asignado: %d\n", i)
+
+			// Devolver el índice del bloque libre encontrado
 			return int32(i), nil
 		}
 	}
 
+	// Si no se encuentran bloques libres, devolver un error
 	return -1, fmt.Errorf("no hay bloques disponibles")
 }

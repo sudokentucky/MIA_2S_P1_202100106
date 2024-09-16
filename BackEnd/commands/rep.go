@@ -126,12 +126,44 @@ func commandRep(rep *REP, outputBuffer *bytes.Buffer) error {
 			fmt.Printf("Error generando reporte de inodos: %v\n", err) // Depuración
 			return err
 		}
+	case "block":
+		// Reporte de Bloques
+		err = reports.ReportBlock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Fprintf(outputBuffer, "Error generando reporte de bloques: %v\n", err)
+			fmt.Printf("Error generando reporte de bloques: %v\n", err) // Depuración
+			return err
+		}
 	case "bm_inode":
 		// Reporte del Bitmap de Inodos
 		err = reports.ReportBMInode(mountedSb, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Fprintf(outputBuffer, "Error generando reporte de bitmap de inodos: %v\n", err)
 			fmt.Printf("Error generando reporte de bitmap de inodos: %v\n", err) // Depuración
+			return err
+		}
+	case "bm_block":
+		// Reporte del Bitmap de Bloques
+		err = reports.ReportBMBlock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Fprintf(outputBuffer, "Error generando reporte de bitmap de bloques: %v\n", err)
+			fmt.Printf("Error generando reporte de bitmap de bloques: %v\n", err) // Depuración
+			return err
+		}
+	case "sb":
+		// Reporte del Superbloque
+		err = reports.ReportSuperblock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Fprintf(outputBuffer, "Error generando reporte del superbloque: %v\n", err)
+			fmt.Printf("Error generando reporte del superbloque: %v\n", err) // Depuración
+			return err
+		}
+	case "file":
+		// Reporte de Archivo
+		err = reports.ReportFile(mountedSb, mountedDiskPath, rep.path, rep.path_file_ls)
+		if err != nil {
+			fmt.Fprintf(outputBuffer, "Error generando reporte de archivo: %v\n", err)
+			fmt.Printf("Error generando reporte de archivo: %v\n", err) // Depuración
 			return err
 		}
 	// Agrega más casos para otros tipos de reportes

@@ -3,7 +3,6 @@ package commands
 import (
 	structs "backend/Structs"
 	globals "backend/globals"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -60,7 +59,7 @@ func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 		return fmt.Errorf("solo el usuario root puede ejecutar este comando")
 	}
 
-	// Verificar que la partición está montada
+	// Verificar que la partición esté montada
 	_, path, err := globals.GetMountedPartition(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se puede encontrar la partición montada: %v", err)
@@ -81,8 +80,8 @@ func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	err = usersInode.Decode(file, inodeOffset) // Usar el descriptor de archivo
+	inodeOffset := int64(sb.S_inode_start)
+	err = usersInode.Decode(file, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -99,9 +98,11 @@ func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 		return fmt.Errorf("el grupo '%s' no existe o está eliminado", chgrp.Grp)
 	}
 
-	// Actualizar el grupo del usuario en users.txt usando AddOrUpdateInUsersFile
+	// Actualizar el grupo del usuario en la línea
 	updatedUserLine := updateGroupInLine(userLine, chgrp.Grp)
-	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, updatedUserLine, chgrp.User, "U")
+
+	// Actualizar la información en users.txt
+	err = globals.AddEntryToUsersFile(file, sb, &usersInode, updatedUserLine, chgrp.User, "U")
 	if err != nil {
 		return fmt.Errorf("error actualizando el grupo del usuario '%s': %v", chgrp.User, err)
 	}

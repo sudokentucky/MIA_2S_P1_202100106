@@ -128,19 +128,10 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("el usuario '%s' ya existe", mkusr.User)
 	}
 
-	// Obtener el siguiente ID disponible
-	nextUserID, err := calculateNextID(file, sb, &usersInode)
+	// Usar la función modular para crear el usuario en users.txt
+	err = globals.CreateUser(file, sb, &usersInode, mkusr.User, mkusr.Pass, mkusr.Grp)
 	if err != nil {
-		return fmt.Errorf("error calculando el siguiente ID para el usuario: %v", err)
-	}
-
-	// Crear una nueva entrada de usuario
-	newUserEntry := fmt.Sprintf("%d,U,%s,%s,%s", nextUserID, mkusr.Grp, mkusr.User, mkusr.Pass)
-
-	// Agregar la entrada al archivo users.txt
-	err = globals.AddOrUpdateInUsersFile(file, sb, &usersInode, newUserEntry, mkusr.User, "U")
-	if err != nil {
-		return fmt.Errorf("error agregando el usuario '%s' a users.txt: %v", mkusr.User, err)
+		return fmt.Errorf("error creando el usuario '%s': %v", mkusr.User, err)
 	}
 
 	// Actualizar el inodo de users.txt
@@ -149,7 +140,7 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
-	// Mostrar mensaje de éxito importante
+	// Mostrar mensaje de éxito
 	fmt.Fprintf(outputBuffer, "Usuario '%s' agregado exitosamente al grupo '%s'\n", mkusr.User, mkusr.Grp)
 
 	return nil

@@ -18,6 +18,10 @@ mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia
 mkfs -id=061A -type=full 
 login -user=root -pass=123 -id=061A
 mkgrp -name=usuarios
+mkgrp -name=administradores
+mkgrp -name=admin
+mkgrp -name=home
+mkgrp -name=prueba
 mkusr -user=keni -pass=123 -grp=usuarios
 mkfile -size=15 -path=/home/user/docs/a.txt -r
 

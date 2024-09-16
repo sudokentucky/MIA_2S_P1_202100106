@@ -66,6 +66,14 @@ var mapCommands = map[string]func([]string) (string, error){ // Cambiamos a (str
 		result, err := Users.ParserChgrp(args)
 		return fmt.Sprintf("%v", result), err
 	},
+	"mkfile": func(args []string) (string, error) {
+		result, err := commands.ParserMkfile(args)
+		return fmt.Sprintf("%v", result), err
+	},
+	"mkdir": func(args []string) (string, error) {
+		result, err := commands.ParserMkdir(args)
+		return fmt.Sprintf("%v", result), err
+	},
 	"help": help,
 }
 

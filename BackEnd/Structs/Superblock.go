@@ -111,10 +111,14 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 
 	// ----------- Crear Inodo para /users.txt -----------
 	// Crear usuarios y grupos utilizando la estructura User
+	// Crear grupo root
+	rootGroup := NewGroup("1", "root")
+	// Crear usuario root
 	rootUser := NewUser("1", "root", "root", "123")
 
-	// Representación en cadena de usuarios y grupos
-	usersText := fmt.Sprintf("%s\n%s\n", rootUser.ToGroupString(), rootUser.ToString())
+	// Concatenar la información de usuarios y grupos
+	usersText := fmt.Sprintf("%s\n%s\n", rootGroup.ToString(), rootUser.ToString())
+
 	usersInode := &Inode{
 		I_uid:   1,
 		I_gid:   1,

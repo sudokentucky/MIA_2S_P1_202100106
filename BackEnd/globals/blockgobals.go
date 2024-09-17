@@ -2,6 +2,7 @@ package globals
 
 import (
 	structs "backend/Structs"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"strings"
@@ -135,50 +136,93 @@ func WriteUsersBlocks(file *os.File, sb *structs.Superblock, inode *structs.Inod
 
 	return nil
 }
+
+// InsertIntoUsersFile inserta una nueva entrada en el archivo users.txt
 func InsertIntoUsersFile(file *os.File, sb *structs.Superblock, inode *structs.Inode, entry string) error {
-	// Leer todo el contenido de los bloques actuales
+	// Leer el contenido actual de los bloques asignados al inodo
 	contenidoActual, err := ReadFileBlocks(file, sb, inode)
 	if err != nil {
-		return fmt.Errorf("error leyendo contenido existente de users.txt: %w", err)
+		return fmt.Errorf("error leyendo el contenido de users.txt: %w", err)
 	}
 
-	// Agregar la nueva entrada al contenido en memoria
-	contenidoNuevo := contenidoActual + entry + "\n"
+	// Eliminar líneas vacías o con espacios innecesarios del contenido actual
+	lineas := strings.Split(strings.TrimSpace(contenidoActual), "\n")
 
-	// Dividir el contenido en bloques de 64 bytes
-	blocks, err := structs.SplitContent(contenidoNuevo)
-	if err != nil {
-		return fmt.Errorf("error dividiendo el contenido en bloques: %w", err)
+	// Obtener el grupo desde la nueva entrada
+	partesEntry := strings.Split(entry, ",")
+	if len(partesEntry) < 4 { // Se espera al menos UID, U, Grupo, Usuario, Contraseña
+		return fmt.Errorf("entrada de usuario inválida: %s", entry)
 	}
+	userGrupo := partesEntry[2] // El grupo del usuario se encuentra en la tercera posición
 
-	// Escribir los bloques nuevamente en el sistema de archivos
-	for i, block := range blocks {
-		// Si necesitamos un nuevo bloque, asignarlo
-		if i >= len(inode.I_block) || inode.I_block[i] == -1 {
-			newBlockIndex, err := assignNewBlock(file, sb, inode)
-			if err != nil {
-				return fmt.Errorf("error asignando nuevo bloque: %w", err)
+	// Buscar el ID del grupo correspondiente en el contenido actual
+	var groupID string
+	var nuevoContenido []string
+	usuarioInsertado := false
+
+	// Recorrer las líneas de `users.txt` para encontrar el grupo correspondiente
+	for _, linea := range lineas {
+		partes := strings.Split(linea, ",")
+		// Agregar la línea actual al nuevo contenido
+		nuevoContenido = append(nuevoContenido, strings.TrimSpace(linea))
+
+		// Si encontramos el grupo correcto
+		if len(partes) > 2 && partes[1] == "G" && partes[2] == userGrupo {
+			groupID = partes[0] // Obtener el ID del grupo
+
+			// Insertar el usuario justo después del grupo si no se ha insertado ya
+			if groupID != "" && !usuarioInsertado {
+				usuarioConGrupo := fmt.Sprintf("%s,U,%s,%s,%s", groupID, partesEntry[2], partesEntry[3], partesEntry[4])
+				nuevoContenido = append(nuevoContenido, usuarioConGrupo)
+				usuarioInsertado = true
 			}
-			inode.I_block[i] = newBlockIndex
-		}
-
-		// Calcular el offset y escribir el contenido del bloque
-		blockOffset := int64(sb.S_block_start + inode.I_block[i]*64)
-		err = block.Encode(file, blockOffset)
-		if err != nil {
-			return fmt.Errorf("error escribiendo bloque %d: %w", inode.I_block[i], err)
 		}
 	}
 
-	// Actualizar el tamaño del archivo
+	// Verificar si el grupo fue encontrado
+	if groupID == "" {
+		return fmt.Errorf("el grupo '%s' no existe", userGrupo)
+	}
+
+	// Combinar todas las líneas en un solo contenido para escribir en el archivo, eliminando posibles líneas en blanco
+	contenidoNuevo := strings.Join(nuevoContenido, "\n") + "\n"
+	fmt.Println("=== Escribiendo nuevo contenido en users.txt ===")
+	fmt.Println(contenidoNuevo)
+
+	// Limpiar los bloques asignados al archivo
+	for _, blockIndex := range inode.I_block {
+		if blockIndex == -1 {
+			break // No hay más bloques asignados
+		}
+
+		blockOffset := int64(sb.S_block_start + blockIndex*sb.S_block_size)
+		var fileBlock structs.FileBlock
+
+		// Limpiar el contenido del bloque
+		fileBlock.ClearContent()
+
+		// Escribir el bloque vacío de nuevo
+		err = fileBlock.Encode(file, blockOffset)
+		if err != nil {
+			return fmt.Errorf("error escribiendo bloque limpio %d: %w", blockIndex, err)
+		}
+	}
+
+	// Reescribir todo el contenido línea por línea
+	err = WriteUsersBlocks(file, sb, inode, contenidoNuevo)
+	if err != nil {
+		return fmt.Errorf("error escribiendo el nuevo contenido en users.txt: %w", err)
+	}
+
+	// Actualizar el tamaño del archivo (i_size)
 	inode.I_size = int32(len(contenidoNuevo))
 
-	// Actualizar tiempos de modificación
+	// Actualizar tiempos de modificación y cambio
 	inode.UpdateMtime()
 	inode.UpdateCtime()
 
 	// Guardar el inodo actualizado en el archivo
-	inodeOffset := int64(sb.S_inode_start) + int64(inode.I_block[0])*int64(sb.S_inode_size)
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(*inode)))
 	err = inode.Encode(file, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error actualizando inodo: %w", err)
@@ -234,36 +278,14 @@ func CreateUser(file *os.File, sb *structs.Superblock, inode *structs.Inode, use
 	return AddEntryToUsersFile(file, sb, inode, userEntry, userName, "U")
 }
 
-func RemoveFromUsersFile(file *os.File, sb *structs.Superblock, inode *structs.Inode, name, entityType string) error {
-	contenido, err := ReadFileBlocks(file, sb, inode)
-	if err != nil {
-		return err
-	}
-
-	// Buscar la línea que queremos eliminar
-	linea, index, err := findLineInUsersFile(contenido, name, entityType)
-	if err != nil {
-		return err
-	}
-
-	// Marcar la entrada como eliminada
-	lineas := strings.Split(contenido, "\n")
-	campos := strings.Split(linea, ",")
-	if len(campos) > 0 && campos[0] != "0" {
-		campos[0] = "0"
-		lineas[index] = strings.Join(campos, ",")
-	}
-
-	// Escribir el nuevo contenido
-	return WriteUsersBlocks(file, sb, inode, strings.Join(lineas, "\n"))
-}
+// FindInUsersFile busca una entrada en el archivo users.txt según nombre y tipo
 func FindInUsersFile(file *os.File, sb *structs.Superblock, inode *structs.Inode, name, entityType string) (string, error) {
 	contenido, err := ReadFileBlocks(file, sb, inode)
 	if err != nil {
 		return "", err
 	}
 
-	// Usamos la nueva función auxiliar para buscar la línea
+	// Usamos la función auxiliar para buscar la línea
 	linea, _, err := findLineInUsersFile(contenido, name, entityType)
 	if err != nil {
 		return "", err
@@ -277,24 +299,25 @@ func findLineInUsersFile(contenido string, name, entityType string) (string, int
 	// Dividir el contenido en líneas
 	lineas := strings.Split(contenido, "\n")
 
-	// Depuración: Imprimir el contenido que estamos procesando
-	fmt.Println("Contenido de users.txt:")
-	fmt.Println(contenido)
-
 	for i, linea := range lineas {
 		campos := strings.Split(linea, ",")
 		if len(campos) < 3 {
 			continue // Ignorar líneas mal formadas
 		}
 
-		tipo, nombre := strings.TrimSpace(campos[1]), strings.TrimSpace(campos[2])
-
-		// Depuración: Mostrar qué tipo y nombre estamos comparando
-		fmt.Printf("Comparando: tipo='%s', nombre='%s'\n", tipo, nombre)
-
-		// Buscar coincidencias exactas con el tipo y nombre
-		if tipo == entityType && nombre == name {
-			return linea, i, nil // Devolver la línea y el índice
+		// Determinar si es un grupo o un usuario según el entityType
+		if entityType == "G" && len(campos) == 3 {
+			// Es un grupo
+			grupo := structs.NewGroup(campos[0], campos[2]) // Crear instancia de Group
+			if grupo.Tipo == entityType && grupo.Group == name {
+				return grupo.ToString(), i, nil // Devolver la línea y el índice
+			}
+		} else if entityType == "U" && len(campos) == 5 {
+			// Es un usuario
+			usuario := structs.NewUser(campos[0], campos[2], campos[3], campos[4]) // Crear instancia de User
+			if usuario.Tipo == entityType && usuario.Name == name {
+				return usuario.ToString(), i, nil // Devolver la línea y el índice
+			}
 		}
 	}
 

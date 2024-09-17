@@ -27,7 +27,6 @@ func validateParamLength(param string, maxLength int, paramName string) error {
 }
 
 // ParserMkusr : Parseo de argumentos para el comando mkusr y captura de los mensajes importantes
-// ParserMkusr : Parseo de argumentos para el comando mkusr y captura de los mensajes importantes
 func ParserMkusr(tokens []string) (string, error) {
 	var outputBuffer bytes.Buffer // Buffer para capturar los mensajes importantes para el usuario
 
@@ -83,6 +82,7 @@ func ParserMkusr(tokens []string) (string, error) {
 
 // commandMkusr : Ejecuta el comando MKUSR con captura de mensajes importantes en el buffer
 func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
+	fmt.Fprintln(outputBuffer, "======================= MKUSR =======================")
 	// Verificar si hay una sesión activa y si el usuario es root
 	if !globals.IsLoggedIn() {
 		return fmt.Errorf("no hay ninguna sesión activa")
@@ -112,7 +112,7 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) // Inicio del inodo de users.txt
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubuacion de los bloques de users.txt
 	err = usersInode.Decode(file, inodeOffset)                              // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
@@ -130,11 +130,11 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("el usuario '%s' ya existe", mkusr.User)
 	}
 
-	// Crear la nueva entrada del usuario
-	userEntry := fmt.Sprintf("%d,U,%s,%s,%s", sb.S_inodes_count+1, mkusr.User, mkusr.Grp, mkusr.Pass)
-
+	// Crear un nuevo objeto de tipo User
+	usuario := structs.NewUser(fmt.Sprintf("%d", sb.S_inodes_count+1), mkusr.Grp, mkusr.User, mkusr.Pass)
+	fmt.Println(usuario.ToString())
 	// Insertar la nueva entrada en el archivo users.txt
-	err = globals.InsertIntoUsersFile(file, sb, &usersInode, userEntry)
+	err = globals.InsertIntoUsersFile(file, sb, &usersInode, usuario.ToString())
 	if err != nil {
 		return fmt.Errorf("error insertando el usuario '%s': %v", mkusr.User, err)
 	}
@@ -147,6 +147,11 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 
 	// Mostrar mensaje de éxito
 	fmt.Fprintf(outputBuffer, "Usuario '%s' agregado exitosamente al grupo '%s'\n", mkusr.User, mkusr.Grp)
+	fmt.Println("\nInodos")
+	sb.PrintInodes(file.Name())
+	fmt.Println("\nBloques")
+	sb.PrintBlocks(file.Name())
+	fmt.Fprintf(outputBuffer, "=====================================================")
 
 	return nil
 }

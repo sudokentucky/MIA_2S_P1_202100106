@@ -2,6 +2,7 @@ package structs
 
 import (
 	"backend/utils"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -87,7 +88,7 @@ func (sb *Superblock) createFolderInInode(file *os.File, inodeIndex int32, paren
 				block.B_content[indexContent] = content
 
 				// Serializar el bloque
-				err = block.Decode(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)))
+				err = block.Encode(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)))
 				if err != nil {
 					return err
 				}
@@ -133,7 +134,7 @@ func (sb *Superblock) createFolderInInode(file *os.File, inodeIndex int32, paren
 				}
 
 				// Serializar el bloque de la carpeta
-				err = folderBlock.Decode(file, int64(sb.S_first_blo))
+				err = folderBlock.Encode(file, int64(sb.S_first_blo))
 				if err != nil {
 					return err
 				}
@@ -149,6 +150,11 @@ func (sb *Superblock) createFolderInInode(file *os.File, inodeIndex int32, paren
 				sb.S_free_blocks_count--
 				sb.S_first_blo += sb.S_block_size
 
+				// Guardar el superbloque actualizado
+				err = sb.Encode(file, int64(sb.S_inode_start))
+				if err != nil {
+					return fmt.Errorf("error al guardar el Superblock después de la creación del inodo: %w", err)
+				}
 				return nil
 			}
 		}
@@ -237,7 +243,7 @@ func (sb *Superblock) createFileInInode(file *os.File, inodeIndex int32, parents
 				block.B_content[indexContent] = content
 
 				// Serializar el bloque
-				err = block.Decode(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)))
+				err = block.Encode(file, int64(sb.S_block_start+(blockIndex*sb.S_block_size)))
 				if err != nil {
 					return err
 				}
@@ -268,7 +274,7 @@ func (sb *Superblock) createFileInInode(file *os.File, inodeIndex int32, parents
 					copy(fileBlock.B_content[:], fileContent[i])
 
 					// Serializar el bloque de users.txt
-					err = fileBlock.Decode(file, int64(sb.S_first_blo))
+					err = fileBlock.Encode(file, int64(sb.S_first_blo))
 					if err != nil {
 						return err
 					}
@@ -301,6 +307,12 @@ func (sb *Superblock) createFileInInode(file *os.File, inodeIndex int32, parents
 				sb.S_inodes_count++
 				sb.S_free_inodes_count--
 				sb.S_first_ino += sb.S_inode_size
+
+				// Guardar el superbloque actualizado
+				err = sb.Encode(file, int64(sb.S_inode_start))
+				if err != nil {
+					return fmt.Errorf("error al guardar el Superblock después de la creación del inodo: %w", err)
+				}
 
 				return nil
 			}

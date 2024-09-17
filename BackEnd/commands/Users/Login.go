@@ -63,16 +63,17 @@ func ParserLogin(tokens []string) (string, error) {
 }
 
 // Lógica para ejecutar el login
+// Lógica para ejecutar el login
 func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 	fmt.Fprintln(outputBuffer, "===== INICIO DE LOGIN =====") // Mensaje importante para el usuario
 	fmt.Fprintf(outputBuffer, "Intentando iniciar sesión con ID: %s, Usuario: %s\n", login.ID, login.User)
 
 	// 1. Validar si ya hay una sesión activa
-	if globals.UsuarioActual != nil && globals.UsuarioActual.Status {
+	if globals.UsuarioActual != nil && globals.UsuarioActual.Status { //verifica en el archivo globals si hay un usuario logueado
 		return fmt.Errorf("ya hay un usuario logueado, debe cerrar sesión primero")
 	}
 
-	// ver las particiones montadas
+	// Ver las particiones montadas
 	fmt.Println("Particiones montadas:")
 	for id, path := range globals.MountedPartitions {
 		fmt.Println("ID: %s | Path: %s\n", id, path)
@@ -101,8 +102,8 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo 1 (que contiene el archivo users.txt)
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
-	//Actualizar la hora de último acceso
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubuacion de los bloques de users.txt
+	// Actualizar la hora de último acceso
 	fmt.Printf("Leyendo inodo users.txt en la posición: %d\n", inodeOffset)
 
 	err = usersInode.Decode(file, inodeOffset)
@@ -110,13 +111,11 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error leyendo inodo de users.txt: %v", err)
 	}
 	fmt.Println("Inodo de users.txt leído correctamente") // Mensaje de depuración
-	//actualizar la hora de último acceso
 	usersInode.UpdateAtime()
 	usersInode.Print() // Mensaje de depuración
 
 	// 5. Leer el contenido de los bloques asociados al archivo users.txt
 	var contenido string
-	//ac
 	for _, blockIndex := range usersInode.I_block {
 		if blockIndex == -1 {
 			// Si el bloque no está asignado, lo ignoramos
@@ -149,7 +148,7 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 
 		datos := strings.Split(linea, ",")
 		if len(datos) == 5 && datos[1] == "U" {
-			// Crear un objeto User a partir de la línea
+			// Crear un objeto User a partir de la línea usando la estructura User
 			usuario := structs.NewUser(datos[0], datos[2], datos[3], datos[4])
 
 			// Comparar usuario y contraseña
@@ -169,6 +168,6 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("usuario o contraseña incorrectos")
 	}
 
-	fmt.Fprintln(outputBuffer, "===== FIN DE LOGIN =====") // Mensaje importante para el usuario
+	fmt.Fprintln(outputBuffer, "======================================================") // Mensaje importante para el usuario
 	return nil
 }

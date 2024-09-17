@@ -5,10 +5,9 @@ import (
 	"backend/utils"
 	"fmt"
 	"os"
-	"os/exec"
 )
 
-// ReportBlock genera un reporte de los bloques utilizados en el sistema de archivos
+// ReportBlockConnections imprime los bloques y sus conexiones directamente en la consola
 func ReportBlock(superblock *structs.Superblock, diskPath string, path string) error {
 	// Crear las carpetas padre si no existen
 	err := utils.CreateParentDirs(path)
@@ -23,127 +22,70 @@ func ReportBlock(superblock *structs.Superblock, diskPath string, path string) e
 	}
 	defer file.Close()
 
-	// Obtener el nombre base del archivo sin la extensión
-	dotFileName, outputImage := utils.GetFileNames(path)
+	// En lugar de crear el archivo DOT y generar una imagen, solo imprimimos los bloques
+	fmt.Println("Recorriendo inodos y bloques...")
 
-	// Inicio del Dot
-	dotContent := initDotGraphForBlocks()
-
-	// Si no hay bloques, devolver un error
-	if superblock.S_blocks_count == 0 {
-		return fmt.Errorf("no hay bloques en el sistema")
-	}
-
-	// Generar los bloques y sus conexiones
-	dotContent, err = generateBlockGraph(dotContent, superblock, file)
+	// Recorrer todos los inodos para obtener los bloques asociados
+	err = printBlockConnections(superblock, file)
 	if err != nil {
 		return err
 	}
 
-	dotContent += "}" // Fin del Dot
-
-	// Crear el archivo DOT
-	err = writeDotFile(dotFileName, dotContent)
-	if err != nil {
-		return err
-	}
-
-	// Ejecutar Graphviz para generar la imagen
-	err = generateBlockImage(dotFileName, outputImage)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Imagen de los bloques generada:", outputImage)
+	fmt.Println("Finalizado.")
 	return nil
 }
 
-// initDotGraphForBlocks inicializa el contenido básico del archivo DOT para los bloques
-func initDotGraphForBlocks() string {
-	return `digraph G {
-		fontname="Helvetica,Arial,sans-serif"
-		node [fontname="Helvetica,Arial,sans-serif", shape=plain, fontsize=12];
-		edge [fontname="Helvetica,Arial,sans-serif", color="#FF7043", arrowsize=0.8];
-		rankdir=LR;
-		bgcolor="#FAFAFA";
-		node [shape=plaintext];
-		blockHeaderColor="#FF9800"; 
-		cellBackgroundColor="#FFFDE7";
-		cellBorderColor="#EEEEEE";
-		textColor="#263238";
-	`
-}
+// printBlockConnections recorre los inodos y los bloques asociados, imprimiéndolos
+func printBlockConnections(superblock *structs.Superblock, file *os.File) error {
+	for i := int32(0); i < superblock.S_inodes_count; i++ {
+		inode := &structs.Inode{}
+		err := inode.Decode(file, int64(superblock.S_inode_start+(i*superblock.S_inode_size)))
+		if err != nil {
+			return fmt.Errorf("error al deserializar el inodo %d: %v", i, err)
+		}
 
-// generateBlockGraph genera el contenido del grafo de bloques en formato DOT
-func generateBlockGraph(dotContent string, superblock *structs.Superblock, file *os.File) (string, error) {
-	// Iterar sobre cada bloque
-	for i := int32(0); i < superblock.S_blocks_count; i++ {
-		block := &structs.FolderBlock{}
-		offset := int64(superblock.S_block_start + (i * superblock.S_block_size))
-
-		// Intentar decodificar como bloque de carpeta
-		err := block.Decode(file, offset)
-		if err == nil {
-			// Es un bloque de carpeta
-			dotContent += generateFolderBlockTable(i, block)
+		// Verificar si el inodo está en uso
+		if inode.I_uid == -1 || inode.I_uid == 0 {
 			continue
 		}
 
-		// Intentar decodificar como bloque de archivo
+		// Imprimir información del inodo
+		fmt.Printf("Inodo %d:\n", i)
+		inode.Print()
+
+		// Recorrer los bloques asociados al inodo
+		for _, block := range inode.I_block {
+			if block != -1 { // Bloques asignados
+				// Imprimir el bloque dependiendo de si es de archivo o de carpeta
+				printBlock(block, inode, superblock, file)
+			}
+		}
+	}
+	return nil
+}
+
+// printBlock imprime la información de un bloque específico dependiendo de su tipo (archivo o carpeta)
+func printBlock(blockIndex int32, inode *structs.Inode, superblock *structs.Superblock, file *os.File) error {
+	// Obtener el desplazamiento en el archivo donde se encuentra el bloque
+	blockOffset := int64(superblock.S_block_start + (blockIndex * superblock.S_block_size))
+
+	// Dependiendo del tipo de inodo, leer e imprimir el bloque correspondiente
+	if inode.I_type[0] == '0' { // Bloque de carpeta
+		folderBlock := &structs.FolderBlock{}
+		err := folderBlock.Decode(file, blockOffset)
+		if err != nil {
+			return fmt.Errorf("error al decodificar bloque de carpeta %d: %w", blockIndex, err)
+		}
+		fmt.Printf("\nBloque de carpeta %d:\n", blockIndex)
+		folderBlock.Print()
+	} else if inode.I_type[0] == '1' { // Bloque de archivo
 		fileBlock := &structs.FileBlock{}
-		err = fileBlock.Decode(file, offset)
-		if err == nil {
-			// Es un bloque de archivo
-			dotContent += generateFileBlockTable(i, fileBlock)
-			continue
+		err := fileBlock.Decode(file, blockOffset)
+		if err != nil {
+			return fmt.Errorf("error al decodificar bloque de archivo %d: %w", blockIndex, err)
 		}
-
-		// Intentar decodificar como bloque de apuntadores (indirectos)
-		// Se puede implementar lógica para bloques indirectos aquí
+		fmt.Printf("\nBloque de archivo %d:\n", blockIndex)
+		fileBlock.Print()
 	}
-
-	return dotContent, nil
-}
-
-// generateFolderBlockTable genera una tabla en DOT para los bloques de carpeta
-func generateFolderBlockTable(blockIndex int32, block *structs.FolderBlock) string {
-	table := fmt.Sprintf(`block%d [label=<
-		<table border="0" cellborder="1" cellspacing="0" cellpadding="4" bgcolor="#FFFDE7" style="rounded">
-			<tr><td colspan="2" bgcolor="#FF9800" align="center"><b>BLOQUE CARPETA %d</b></td></tr>
-	`, blockIndex, blockIndex)
-
-	// Añadir contenido de la carpeta (nombre e inodo)
-	for i, content := range block.B_content {
-		if content.B_inodo != -1 { // Bloque usado
-			name := string(content.B_name[:])
-			table += fmt.Sprintf("<tr><td><b>Contenido %d - Inodo %d</b></td><td>%s</td></tr>", i+1, content.B_inodo, name)
-		}
-	}
-
-	table += "</table>>];"
-	return table
-}
-
-// generateFileBlockTable genera una tabla en DOT para los bloques de archivo
-func generateFileBlockTable(blockIndex int32, block *structs.FileBlock) string {
-	content := string(block.B_content[:])
-	table := fmt.Sprintf(`block%d [label=<
-		<table border="0" cellborder="1" cellspacing="0" cellpadding="4" bgcolor="#FFFDE7" style="rounded">
-			<tr><td colspan="2" bgcolor="#FF9800" align="center"><b>BLOQUE ARCHIVO %d</b></td></tr>
-			<tr><td colspan="2">%s</td></tr>
-		</table>>];
-	`, blockIndex, blockIndex, content)
-
-	return table
-}
-
-// generateBlockImage genera una imagen a partir del archivo DOT usando Graphviz
-func generateBlockImage(dotFileName string, outputImage string) error {
-	cmd := exec.Command("dot", "-Tpng", dotFileName, "-o", outputImage)
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("error al ejecutar Graphviz: %v", err)
-	}
-
 	return nil
 }

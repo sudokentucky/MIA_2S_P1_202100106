@@ -17,12 +17,28 @@ mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia
 mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -name="Primaria3"
 mkfs -id=061A -type=full 
 login -user=root -pass=123 -id=061A
+#Crear grupos
 mkgrp -name=usuarios
 mkgrp -name=administradores
 mkgrp -name=admin
 mkgrp -name=home
 mkgrp -name=prueba
+#Crear usuarios
 mkusr -user=keni -pass=123 -grp=usuarios
+mkusr -user=keneth -pass=123 -grp=admin
+#usuarios para usuarios
+mkusr -user=prueba -pass=123 -grp=usuarios
+mkusr -user=prueba2 -pass=123 -grp=usuarios
+mkusr -user=prueba -pass=123 -grp=pr #Error porque el grupo no existe
+mkusr -user=k99 -pass=123 -grp=prueba
+mkusr -user=keni -pass=123 -grp=home
+#Eliminar un grupo
+rmgrp -name=usuarios
+#Eliminar un usuario
+rmusr -usr=keni
+rmusr -usr=keneth
+#cambiar el usuario de grupo
+chgrp -usr=keni -grp=admin
 mkfile -size=15 -path=/home/user/docs/a.txt -r
 
 mkgrp -name=usuarios // Debe dar error porque ya existe

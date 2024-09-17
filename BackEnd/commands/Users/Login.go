@@ -102,6 +102,7 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 	// Leer el inodo 1 (que contiene el archivo users.txt)
 	var usersInode structs.Inode
 	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
+	//Actualizar la hora de último acceso
 	fmt.Printf("Leyendo inodo users.txt en la posición: %d\n", inodeOffset)
 
 	err = usersInode.Decode(file, inodeOffset)
@@ -109,10 +110,13 @@ func commandLogin(login *LOGIN, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error leyendo inodo de users.txt: %v", err)
 	}
 	fmt.Println("Inodo de users.txt leído correctamente") // Mensaje de depuración
-	usersInode.Print()                                    // Mensaje de depuración
+	//actualizar la hora de último acceso
+	usersInode.UpdateAtime()
+	usersInode.Print() // Mensaje de depuración
 
 	// 5. Leer el contenido de los bloques asociados al archivo users.txt
 	var contenido string
+	//ac
 	for _, blockIndex := range usersInode.I_block {
 		if blockIndex == -1 {
 			// Si el bloque no está asignado, lo ignoramos

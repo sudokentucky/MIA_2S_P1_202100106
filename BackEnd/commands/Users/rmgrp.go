@@ -4,6 +4,7 @@ import (
 	structs "backend/Structs"
 	globals "backend/globals"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -78,8 +79,8 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start)
-	err = usersInode.Decode(file, inodeOffset) // Usar el descriptor de archivo
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //posicion del contenido de users.txt
+	err = usersInode.Decode(file, inodeOffset)                              // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -151,7 +152,7 @@ func RemoveUsersFromGroup(file *os.File, sb *structs.Superblock, usersInode *str
 	// Si se ha modificado alguna línea, guardar los cambios
 	if modificado {
 		contenidoActualizado := strings.Join(lineas, "\n")
-		err = globals.WriteFileBlocks(file, sb, usersInode, contenidoActualizado)
+		err = globals.WriteUsersBlocks(file, sb, usersInode, contenidoActualizado)
 		if err != nil {
 			return fmt.Errorf("error guardando los cambios en users.txt: %v", err)
 		}

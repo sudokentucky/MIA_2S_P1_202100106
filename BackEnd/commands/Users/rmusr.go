@@ -4,6 +4,7 @@ import (
 	structs "backend/Structs"
 	globals "backend/globals"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"regexp"
@@ -78,7 +79,7 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start)
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
 	err = usersInode.Decode(file, inodeOffset) // Usamos el descriptor de archivo en lugar de la ruta
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)

@@ -29,7 +29,7 @@ mkgrp -name=usuarios // Debe dar error porque ya existe
 mkgrp -name=administradores
 
 mkusr -user=keni -pass=123 -grp=usuarios // Debe dar error porque ya existe
-mkusr -user=keneth -pass=123 -grp=usuarios
+mkusr -user=keneth -pass=123 -grp=administradores
 mkusr -usr=prueba -pass=123 -grp=usuarios //probar la asignacion de punteros a usuarios con mas usuarios
 
 logout

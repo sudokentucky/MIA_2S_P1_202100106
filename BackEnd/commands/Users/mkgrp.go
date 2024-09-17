@@ -80,8 +80,11 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode)))
+	// Calcular el offset del inodo de users.txt, esta en el inodo 1
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) // Inicio del inodo de users.txt
+	// Decodificar el inodo de users.txt
 	err = usersInode.Decode(file, inodeOffset)
+	usersInode.UpdateAtime() // Actualizar la última fecha de acceso
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -108,12 +111,15 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 	}
 
 	// Actualizar el inodo de users.txt
+
 	err = usersInode.Encode(file, inodeOffset)
+	usersInode.UpdateAtime()
 	if err != nil {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
 	fmt.Fprintf(outputBuffer, "Grupo creado exitosamente: %s\n", mkgrp.Name)
+
 	fmt.Fprintf(outputBuffer, "===========================================================")
 	return nil
 }

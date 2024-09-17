@@ -8,15 +8,15 @@ import (
 )
 
 type Inode struct {
-	I_uid   int32
-	I_gid   int32
-	I_size  int32
-	I_atime float32
-	I_ctime float32
-	I_mtime float32
+	I_uid   int32     //UID del usuario propietario del archivo
+	I_gid   int32     //GID del grupo propietario del archivo
+	I_size  int32     //Tamaño del archivo en bytes
+	I_atime float32   //Último acceso al archivo
+	I_ctime float32   //Último cambio de permisos
+	I_mtime float32   //Última modificación del archivo
 	I_block [15]int32 // 12 bloques directos, 1 indirecto simple, 1 indirecto doble, 1 indirecto triple
-	I_type  [1]byte
-	I_perm  [3]byte
+	I_type  [1]byte   //Indica si es archivo o carpeta 1=archivo, 0=carpeta
+	I_perm  [3]byte   //Guarda los permisos del archivo
 	// Total: 88 bytes
 }
 
@@ -36,6 +36,18 @@ func (inode *Inode) Decode(file *os.File, offset int64) error {
 		return fmt.Errorf("error reading Inode from file: %w", err)
 	}
 	return nil
+}
+
+func (inode *Inode) UpdateAtime() {
+	inode.I_atime = float32(time.Now().Unix())
+}
+
+func (inode *Inode) UpdateMtime() {
+	inode.I_mtime = float32(time.Now().Unix())
+}
+
+func (inode *Inode) UpdateCtime() {
+	inode.I_ctime = float32(time.Now().Unix())
 }
 
 // Print imprime los atributos del inodo

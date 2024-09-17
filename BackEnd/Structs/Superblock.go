@@ -324,3 +324,8 @@ func (sb *Superblock) FindNextFreeBlock(file *os.File) (int32, error) {
 	// Si no se encuentran bloques libres, devolver un error
 	return -1, fmt.Errorf("no hay bloques disponibles")
 }
+
+func (sb *Superblock) CalculateInodeOffset(inodeIndex int32) int64 {
+	// Calcula el desplazamiento en el archivo basado en el índice del inodo
+	return int64(sb.S_inode_start) + int64(inodeIndex)*int64(sb.S_inode_size)
+}

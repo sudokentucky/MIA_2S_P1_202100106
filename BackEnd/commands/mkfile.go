@@ -139,11 +139,6 @@ func commandMkfile(mkfile *MKFILE, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error al verificar directorio: %w", err)
 	}
 
-	// Si -r NO está habilitado y el directorio no existe, devolvemos un error
-	if !mkfile.r && !exists {
-		return fmt.Errorf("el directorio '%s' no existe y no se puede crear sin el parámetro -r", dirPath)
-	}
-
 	// Si -r está habilitado y el directorio no existe, creamos los directorios intermedios
 	if mkfile.r && !exists {
 		err = createDirectory(dirPath, mkfile.r, partitionSuperblock, file, mountedPartition)

@@ -10,8 +10,8 @@ export default function CommandExecution() {
   const [messageType, setMessageType] = useState<"success" | "error" | "info" | "">("");
   const [lineCount, setLineCount] = useState(1);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // Ref para el textarea
-  const lineCounterRef = useRef<HTMLDivElement>(null); // Ref para el contenedor del contador de líneas
+  const textareaRef = useRef<HTMLTextAreaElement>(null); 
+  const lineCounterRef = useRef<HTMLDivElement>(null); 
 
   const showMessage = (text: string, type: "success" | "error" | "info") => {
     setMessage(text);
@@ -22,13 +22,11 @@ export default function CommandExecution() {
     }, 5000);
   };
 
-  // Update line count whenever inputText changes
   useEffect(() => {
     const lines = inputText.split("\n").length;
     setLineCount(lines);
   }, [inputText]);
 
-  // Sincroniza el scroll entre el textarea y el contador de líneas
   const syncScroll = () => {
     if (textareaRef.current && lineCounterRef.current) {
       lineCounterRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -81,24 +79,25 @@ export default function CommandExecution() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 font-inter text-gray-800">
+    <div className="flex flex-col min-h-screen" style={{ backgroundColor: "#E6E6FA" }}>
       <div className="flex-grow flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl p-8 bg-white rounded-lg shadow-md transition-all hover:shadow-xl transform hover:scale-105 duration-300 ease-in-out">
+        {/* Reducir el tamaño del panel */}
+        <div className="w-full max-w-5xl p-8 bg-beige rounded-lg shadow-lg transition-all hover:shadow-xl transform hover:scale-105 duration-300 ease-in-out" style={{ backgroundColor: "#F5F5DC" }}>
           <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
             Sistema de archivos ext2
           </h1>
 
           <div className="mb-4 relative">
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="input-text">
+            <label className="block text-base font-medium text-gray-700 mb-2" htmlFor="input-text">
               Entrada de comando o archivo de texto
             </label>
 
             <div className="flex">
               {/* Line counter */}
               <div
-                ref={lineCounterRef} // Ref para el contador de líneas
+                ref={lineCounterRef}
                 className="line-numbers bg-gray-200 p-2 rounded-l-md text-sm text-right overflow-hidden"
-                style={{ height: 'auto', minHeight: '150px', maxHeight: '224px' }}
+                style={{ height: 'auto', minHeight: '200px', maxHeight: '300px' }} 
               >
                 {Array.from({ length: lineCount }, (_, i) => i + 1).map((line) => (
                   <div key={line}>{line}</div>
@@ -108,29 +107,29 @@ export default function CommandExecution() {
               {/* Input text area */}
               <textarea
                 id="input-text"
-                ref={textareaRef} // Ref para el textarea
-                className="w-full min-h-56 p-2 border border-gray-300 rounded-r-md resize-none shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 text-sm overflow-y-auto"
+                ref={textareaRef}
+                className="w-full min-h-56 p-3 border border-gray-300 rounded-r-md resize-none shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 text-sm overflow-y-auto"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onScroll={syncScroll} // Sincroniza el scroll con el contador de líneas
+                onScroll={syncScroll}
                 placeholder="Ingrese comandos aquí..."
                 disabled={loading}
-                style={{ height: "auto", minHeight: "150px", fontSize: '12px', whiteSpace: 'pre' }}
+                style={{ height: "auto", minHeight: "200px", fontSize: '13px', whiteSpace: 'pre' }}
               />
             </div>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="output-text">
+            <label className="block text-base font-medium text-gray-700 mb-2" htmlFor="output-text">
               Resultado de la ejecución
             </label>
             <textarea
               id="output-text"
-              className="w-full min-h-56 p-2 border border-gray-300 rounded-md resize-none bg-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+              className="w-full min-h-56 p-3 border border-gray-300 rounded-md resize-none bg-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
               value={outputText}
               readOnly
               placeholder="Resultado de la ejecución aparecerá aquí..."
-              style={{ fontFamily: '"Courier New", monospace', fontSize: '12px' }}
+              style={{ fontFamily: '"Courier New", monospace', fontSize: '13px', minHeight: '200px' }}
             />
           </div>
 
@@ -170,9 +169,6 @@ export default function CommandExecution() {
         </div>
       </div>
 
-      <footer className="py-4 text-center text-sm text-gray-500">
-        Keneth Lopez - 202100106
-      </footer>
     </div>
   );
 }

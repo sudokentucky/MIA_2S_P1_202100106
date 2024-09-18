@@ -4,6 +4,7 @@ import (
 	structures "backend/Structs"
 	global "backend/globals"
 	utils "backend/utils"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -17,13 +18,9 @@ type MKDIR struct {
 	p    bool   // Opción -p (crea directorios padres si no existen)
 }
 
-/*
-   mkdir -p -path=/home/user/docs/usac
-   mkdir -path="/home/mis documentos/archivos clases"
-*/
-
 func ParserMkdir(tokens []string) (string, error) {
-	cmd := &MKDIR{} // Crea una nueva instancia de MKDIR
+	cmd := &MKDIR{}               // Crea una nueva instancia de MKDIR
+	var outputBuffer bytes.Buffer // Buffer para capturar mensajes importantes
 
 	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
 	args := strings.Join(tokens, " ")
@@ -73,16 +70,17 @@ func ParserMkdir(tokens []string) (string, error) {
 		return "", errors.New("faltan parámetros requeridos: -path")
 	}
 
-	// Aquí se puede agregar la lógica para ejecutar el comando mkdir con los parámetros proporcionados
-	err := commandMkdir(cmd)
+	// Ejecutar el comando mkdir con captura de mensajes en el buffer
+	err := commandMkdir(cmd, &outputBuffer)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("MKDIR: Directorio %s creado correctamente.", cmd.path), nil // Devuelve el comando MKDIR creado
+	// Retorna el contenido del buffer al usuario
+	return outputBuffer.String(), nil
 }
 
-func commandMkdir(mkdir *MKDIR) error {
+func commandMkdir(mkdir *MKDIR, outputBuffer *bytes.Buffer) error {
 	// Verificar si hay un usuario logueado
 	if !global.IsLoggedIn() {
 		return fmt.Errorf("no hay un usuario logueado")
@@ -104,37 +102,54 @@ func commandMkdir(mkdir *MKDIR) error {
 	}
 	defer file.Close() // Cerrar el archivo cuando ya no sea necesario
 
-	// Crear el directorio usando el archivo abierto
-	err = createDirectory(mkdir.path, partitionSuperblock, file, mountedPartition)
+	// Capturar mensajes importantes en el buffer
+	fmt.Fprintln(outputBuffer, "======================= MKDIR =======================")
+	fmt.Fprintf(outputBuffer, "Creando directorio: %s\n", mkdir.path)
+
+	// Crear el directorio usando el archivo abierto, pasando la opción -p
+	err = createDirectory(mkdir.path, mkdir.p, partitionSuperblock, file, mountedPartition)
 	if err != nil {
 		return fmt.Errorf("error al crear el directorio: %w", err)
 	}
+
+	fmt.Fprintf(outputBuffer, "Directorio %s creado exitosamente\n", mkdir.path)
+	fmt.Fprintln(outputBuffer, "=====================================================")
 
 	return nil
 }
 
-func createDirectory(dirPath string, sb *structures.Superblock, file *os.File, mountedPartition *structures.Partition) error {
-	fmt.Println("\nCreando directorio:", dirPath)
+func createDirectory(dirPath string, createParents bool, sb *structures.Superblock, file *os.File, mountedPartition *structures.Partition) error {
 
+	// Obtener directorios padres y el destino del directorio
 	parentDirs, destDir := utils.GetParentDirectories(dirPath)
-	fmt.Println("\nDirectorios padres:", parentDirs)
-	fmt.Println("Directorio destino:", destDir)
 
-	// Crear el directorio según el path proporcionado, ahora usando el archivo abierto
+	// Si el parámetro -p está habilitado (createParents == true), crear los directorios intermedios
+	if createParents {
+		for _, parentDir := range parentDirs {
+			err := sb.CreateFolder(file, parentDirs, parentDir)
+			if err != nil {
+				return fmt.Errorf("error al crear el directorio padre '%s': %w", parentDir, err)
+			}
+		}
+	}
+
+	// Crear el directorio final
 	err := sb.CreateFolder(file, parentDirs, destDir)
 	if err != nil {
 		return fmt.Errorf("error al crear el directorio: %w", err)
 	}
-
-	// Imprimir inodos y bloques
-	sb.PrintInodes(file.Name())
-	sb.PrintBlocks(file.Name())
 
 	// Serializar el superbloque en el archivo de partición abierto
 	err = sb.Encode(file, int64(mountedPartition.Part_start))
 	if err != nil {
 		return fmt.Errorf("error al serializar el superbloque: %w", err)
 	}
+
+	// Imprimir inodos y bloques en el buffer
+	fmt.Println("\nInodos:") // Depuración
+	sb.PrintInodes(file.Name())
+	fmt.Println("\nBloques:") // Depuración
+	sb.PrintBlocks(file.Name())
 
 	return nil
 }

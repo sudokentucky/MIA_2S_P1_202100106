@@ -12,11 +12,21 @@ fdisk -size=50 -unit=M -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disk
 fdisk -size=50 -unit=M -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia -type=L -name="Logica2"
 fdisk -size=50 -unit=M -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -type=L -name="Logica3"
 # Montar particiones primarias
-mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -name="Primaria1"
 mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -name="Primaria2"
 mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -name="Primaria3"
+mount -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia  -name="Primaria1"
+
 mkfs -id=061A -type=full 
 login -user=root -pass=123 -id=061A
+mkdir -path="/home"
+mkdir -path="/home/usac"
+mkdir -path="/home/work"
+mkdir -path="/home/usac/mia"
+mkfile -size=10 -path="/home/usac/mia/1.txt"
+cat -file1="/home/usac/mia/1.txt"
+
+mkfile -size=10  -path="/home/mis documentos/archivo 1.txt"
+
 #Crear grupos
 mkgrp -name=usuarios
 mkgrp -name=administradores
@@ -41,6 +51,7 @@ rmusr -usr=keneth
 #cambiar el usuario de grupo
 chgrp -usr=keni -grp=admin
 mkfile -size=15 -path=/home/user/docs/a.txt -r
+cat -file1=/home/user/docs/a.txt
 
 mkgrp -name=usuarios // Debe dar error porque ya existe
 mkgrp -name=administradores
@@ -57,12 +68,6 @@ login -user=keni -pass=123 -id=061A // Usuario aun no creado debe dar error
 
 # Crea el archivo 'archivo 1.txt' en la carpeta 'mis documentos'
 # No se crean carpetas adicionales, y el archivo tendrá 0 bytes de tamaño
-mkdir -path="/home"
-mkdir -path="/home/usac"
-mkdir -path="/home/work"
-mkdir -path="/home/usac/mia"
-mkfile -path="/home/usac/mia/1.txt"
-mkfile -path="/home/mis documentos/archivo 1.txt"
 
 mkfile -size=10 -path=/home/user/docs/a.txt
 # Error: Las carpetas padres no existen y no se utilizó el parámetro -r para crearlas.
@@ -73,6 +78,5 @@ rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/ExampleDi
 rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/ExampleDisk_block.png -name=block
 rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/ExampleDisk_bm_block.txt -name=bm_block
 rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/Example_bm_inode.txt -name=bm_inode
-rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/Example_bm_block.txt -name=bm_block
 rep -id=061A -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Reps/Example_inode.png -name=inode
 rmdisk -path=/home/sudokentucky/Escritorio/Archivos/Pruebas/Disks/ExampleDisk.mia 

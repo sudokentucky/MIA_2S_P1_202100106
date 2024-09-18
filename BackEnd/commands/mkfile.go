@@ -4,9 +4,11 @@ import (
 	structures "backend/Structs"
 	global "backend/globals"
 	utils "backend/utils"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,18 +24,14 @@ type MKFILE struct {
 
 // ParserMkfile parsea el comando mkfile y devuelve una instancia de MKFILE
 func ParserMkfile(tokens []string) (string, error) {
-	cmd := &MKFILE{} // Crea una nueva instancia de MKFILE
+	cmd := &MKFILE{}              // Crea una nueva instancia de MKFILE
+	var outputBuffer bytes.Buffer // Buffer para capturar mensajes importantes
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
 	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando mkfile
 	re := regexp.MustCompile(`-path="[^"]+"|-path=[^\s]+|-r|-size=\d+|-cont="[^"]+"|-cont=[^\s]+`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
 	matches := re.FindAllString(args, -1)
 
-	// Verificar que todos los tokens fueron reconocidos por la expresión regular
 	if len(matches) != len(tokens) {
-		// Identificar el parámetro inválido
 		for _, token := range tokens {
 			if !re.MatchString(token) {
 				return "", fmt.Errorf("parámetro inválido: %s", token)
@@ -41,9 +39,7 @@ func ParserMkfile(tokens []string) (string, error) {
 		}
 	}
 
-	// Itera sobre cada coincidencia encontrada
 	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
 		kv := strings.SplitN(match, "=", 2)
 		key := strings.ToLower(kv[0])
 		var value string
@@ -51,7 +47,6 @@ func ParserMkfile(tokens []string) (string, error) {
 			value = kv[1]
 		}
 
-		// Remove quotes from value if present
 		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 			value = strings.Trim(value, "\"")
 		}
@@ -59,59 +54,51 @@ func ParserMkfile(tokens []string) (string, error) {
 		// Switch para manejar diferentes parámetros
 		switch key {
 		case "-path":
-			// Verifica que el path no esté vacío
 			if value == "" {
 				return "", errors.New("el path no puede estar vacío")
 			}
 			cmd.path = value
 		case "-r":
-			// Establece el valor de r a true
-			cmd.r = true
+			cmd.r = true // Habilitar la opción recursiva
 		case "-size":
-			// Convierte el valor del tamaño a un entero
 			size, err := strconv.Atoi(value)
 			if err != nil || size < 0 {
 				return "", errors.New("el tamaño debe ser un número entero no negativo")
 			}
 			cmd.size = size
 		case "-cont":
-			// Verifica que el contenido no esté vacío
 			if value == "" {
 				return "", errors.New("el contenido no puede estar vacío")
 			}
 			cmd.cont = value
 		default:
-			// Si el parámetro no es reconocido, devuelve un error
 			return "", fmt.Errorf("parámetro desconocido: %s", key)
 		}
 	}
 
-	// Verifica que el parámetro -path haya sido proporcionado
 	if cmd.path == "" {
 		return "", errors.New("faltan parámetros requeridos: -path")
 	}
 
-	// Si no se proporcionó el tamaño, se establece por defecto a 0
 	if cmd.size == 0 {
 		cmd.size = 0
 	}
 
-	// Si no se proporcionó el contenido, se establece por defecto a ""
 	if cmd.cont == "" {
 		cmd.cont = ""
 	}
 
 	// Crear el archivo con los parámetros proporcionados
-	err := commandMkfile(cmd)
+	err := commandMkfile(cmd, &outputBuffer)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("MKFILE: Archivo %s creado correctamente.", cmd.path), nil // Devuelve el comando MKFILE creado
+	// Retorna el contenido del buffer con los mensajes importantes
+	return outputBuffer.String(), nil
 }
 
-// Función ficticia para crear el archivo (debe ser implementada)
-func commandMkfile(mkfile *MKFILE) error {
+func commandMkfile(mkfile *MKFILE, outputBuffer *bytes.Buffer) error {
 	// Verificar si hay un usuario logueado
 	if !global.IsLoggedIn() {
 		return fmt.Errorf("no hay un usuario logueado")
@@ -138,11 +125,41 @@ func commandMkfile(mkfile *MKFILE) error {
 	}
 	defer file.Close() // Cerrar el archivo cuando ya no sea necesario
 
-	// Crear el archivo usando el archivo de partición abierto
-	err = createFile(mkfile.path, mkfile.size, mkfile.cont, partitionSuperblock, file, mountedPartition)
+	// Capturar mensajes importantes en el buffer
+	fmt.Fprintln(outputBuffer, "======================= MKFILE =======================")
+	fmt.Fprintf(outputBuffer, "Creando archivo: %s\n", mkfile.path)
+
+	// Obtener los directorios y el nombre del archivo
+	dirPath, _ := GetDirectoryAndFile(mkfile.path)
+
+	// Verificar solo la existencia del directorio (sin incluir el archivo)
+	fmt.Fprintf(outputBuffer, "Verificando la existencia del directorio: %s\n", dirPath)
+	exists, _, err := directoryExists(partitionSuperblock, file, 0, dirPath) // Usamos el inodo raíz (0) para empezar la búsqueda
 	if err != nil {
-		return fmt.Errorf("error al crear el archivo: %w", err) // Devuelve el error correctamente
+		return fmt.Errorf("error al verificar directorio: %w", err)
 	}
+
+	// Si -r NO está habilitado y el directorio no existe, devolvemos un error
+	if !mkfile.r && !exists {
+		return fmt.Errorf("el directorio '%s' no existe y no se puede crear sin el parámetro -r", dirPath)
+	}
+
+	// Si -r está habilitado y el directorio no existe, creamos los directorios intermedios
+	if mkfile.r && !exists {
+		err = createDirectory(dirPath, mkfile.r, partitionSuperblock, file, mountedPartition)
+		if err != nil {
+			return fmt.Errorf("error al crear directorios intermedios: %w", err)
+		}
+	}
+
+	// Crear el archivo usando el archivo de partición abierto
+	err = createFile(mkfile.path, mkfile.size, mkfile.cont, partitionSuperblock, file, mountedPartition, outputBuffer)
+	if err != nil {
+		return fmt.Errorf("error al crear el archivo: %w", err)
+	}
+
+	fmt.Fprintf(outputBuffer, "Archivo %s creado exitosamente\n", mkfile.path)
+	fmt.Fprintln(outputBuffer, "=====================================================")
 
 	return nil
 }
@@ -157,34 +174,41 @@ func generateContent(size int) string {
 }
 
 // createFile ahora usa el archivo de partición ya abierto
-func createFile(filePath string, size int, content string, sb *structures.Superblock, file *os.File, mountedPartition *structures.Partition) error {
-	fmt.Println("\nCreando archivo:", filePath)
+func createFile(filePath string, size int, content string, sb *structures.Superblock, file *os.File, mountedPartition *structures.Partition, outputBuffer *bytes.Buffer) error {
+	fmt.Fprintf(outputBuffer, "Creando archivo en la ruta: %s\n", filePath)
 
+	// Obtener los directorios padres y el destino
 	parentDirs, destDir := utils.GetParentDirectories(filePath)
-	fmt.Println("\nDirectorios padres:", parentDirs)
-	fmt.Println("Directorio destino:", destDir)
-
 	// Obtener contenido por chunks
 	chunks := utils.SplitStringIntoChunks(content)
-	fmt.Println("\nChunks del contenido:", chunks)
+	fmt.Fprintf(outputBuffer, "Contenido generado: %v\n", chunks)
 
-	// Crear el archivo usando el archivo de partición abierto
+	// Crear el archivo en el sistema de archivos
 	err := sb.CreateFile(file, parentDirs, destDir, size, chunks)
 	if err != nil {
 		return fmt.Errorf("error al crear el archivo: %w", err)
 	}
 
-	// Imprimir inodos y bloques
-	fmt.Println("\nInodos del archivo:")
-	sb.PrintInodes(file.Name())
-	fmt.Println("\nBloques de datos del archivo:")
-	sb.PrintBlocks(file.Name())
-
-	// Serializar el superbloque en el archivo de partición abierto
+	// Serializar el superbloque
 	err = sb.Encode(file, int64(mountedPartition.Part_start))
 	if err != nil {
 		return fmt.Errorf("error al serializar el superbloque: %w", err)
 	}
 
+	//Mostrar estructuras en consola de depuración
+	fmt.Println("\nInodos:")
+	sb.PrintInodes(file.Name())
+	fmt.Println("\nBloques de datos:")
+	sb.PrintBlocks(file.Name())
+
 	return nil
+}
+
+// Función para obtener la carpeta (directorio) y el nombre del archivo
+func GetDirectoryAndFile(path string) (string, string) {
+	// Obtener la carpeta donde se creará el archivo
+	dir := filepath.Dir(path)
+	// Obtener el nombre del archivo
+	file := filepath.Base(path)
+	return dir, file
 }

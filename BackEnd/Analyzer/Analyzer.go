@@ -74,6 +74,10 @@ var mapCommands = map[string]func([]string) (string, error){ // Cambiamos a (str
 		result, err := commands.ParserMkdir(args)
 		return fmt.Sprintf("%v", result), err
 	},
+	"cat": func(args []string) (string, error) {
+		result, err := commands.ParserCat(args)
+		return fmt.Sprintf("%v", result), err
+	},
 	"help": help,
 }
 

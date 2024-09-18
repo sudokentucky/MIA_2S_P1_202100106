@@ -72,15 +72,21 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock usando el descriptor de archivo
-	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
+	// Cargar el Superblock y la partición usando el descriptor de archivo
+	mbr, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
 	}
 
+	// Obtener la partición montada
+	partition, err := mbr.GetPartitionByID(globals.UsuarioActual.Id)
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener la partición: %v", err)
+	}
+
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubuacion de los bloques de users.txt
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) // Posición de los bloques de users.txt
 	err = usersInode.Decode(file, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
@@ -104,7 +110,18 @@ func commandRmusr(rmusr *RMUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
+	// Guardar el Superblock utilizando el Part_start como el offset
+	err = sb.Encode(file, int64(partition.Part_start)) // Guardar en Part_start
+	if err != nil {
+		return fmt.Errorf("error guardando el Superblock: %v", err)
+	} else {
+		fmt.Println("Superbloque guardado correctamente") // Mensaje de éxito
+
+	}
+
 	// Mensaje de éxito
+	sb.Print()
+	fmt.Println("------")
 	fmt.Fprintf(outputBuffer, "Usuario '%s' eliminado exitosamente.\n", rmusr.User)
 	fmt.Println("\nBloques:")
 	sb.PrintBlocks(file.Name())

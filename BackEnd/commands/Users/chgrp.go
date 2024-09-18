@@ -62,7 +62,7 @@ func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 	}
 
 	// Verificar que la partición esté montada
-	_, path, err := globals.GetMountedPartition(globals.UsuarioActual.Id)
+	partition, path, err := globals.GetMountedPartition(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se puede encontrar la partición montada: %v", err)
 	}
@@ -92,6 +92,12 @@ func commandChgrp(chgrp *CHGRP, outputBuffer *strings.Builder) error {
 	err = ChangeUserGroup(file, sb, &usersInode, chgrp.User, chgrp.Grp)
 	if err != nil {
 		return fmt.Errorf("error cambiando el grupo del usuario '%s': %v", chgrp.User, err)
+	}
+
+	//Guardar el superbloque
+	err = sb.Encode(file, int64(partition.Part_start))
+	if err != nil {
+		return fmt.Errorf("error guardando el superbloque: %v", err)
 	}
 
 	// Mensaje de confirmación
@@ -242,9 +248,6 @@ func WriteContentToBlocks(file *os.File, sb *structs.Superblock, usersInode *str
 			break // No hay más bloques asignados
 		}
 
-		// Calcular el offset para el bloque actual
-		blockOffset := int64(sb.S_block_start + blockIndex*sb.S_block_size)
-
 		// Dividir los datos en bloques de tamaño máximo
 		start := i * blockSize
 		end := start + blockSize
@@ -255,12 +258,6 @@ func WriteContentToBlocks(file *os.File, sb *structs.Superblock, usersInode *str
 		// Crear un bloque con el contenido correspondiente
 		var fileBlock structs.FileBlock
 		copy(fileBlock.B_content[:], data[start:end])
-
-		// Escribir el bloque en el archivo
-		err := fileBlock.Encode(file, blockOffset)
-		if err != nil {
-			return fmt.Errorf("error escribiendo el bloque %d: %w", blockIndex, err)
-		}
 
 		// Mostrar el bloque escrito para depuración
 		fmt.Printf("Escribiendo bloque %d: %s\n", blockIndex, string(fileBlock.B_content[:]))

@@ -72,16 +72,22 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock
-	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
+	// Cargar el Superblock y la partición
+	mbr, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
 	}
 
+	// Obtener la partición montada
+	partition, err := mbr.GetPartitionByID(globals.UsuarioActual.Id)
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener la partición: %v", err)
+	}
+
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //posicion del contenido de users.txt
-	err = usersInode.Decode(file, inodeOffset)                              // Usar el descriptor de archivo
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //posición del inodo de users.txt
+	err = usersInode.Decode(file, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
 	}
@@ -92,16 +98,22 @@ func commandRmgrp(rmgrp *RMGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("el grupo '%s' no existe", rmgrp.Name)
 	}
 
-	// Cambiar el estado del grupo y de los usuarios asociados en una sola llamada
+	// Cambiar el estado del grupo y de los usuarios asociados
 	err = UpdateEntityStateOrRemoveUsers(file, sb, &usersInode, rmgrp.Name, "G", "0")
 	if err != nil {
 		return fmt.Errorf("error eliminando el grupo y usuarios asociados: %v", err)
 	}
 
 	// Actualizar el inodo de users.txt en el archivo
-	err = usersInode.Encode(file, inodeOffset) // Usar el descriptor de archivo
+	err = usersInode.Encode(file, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
+	}
+
+	// Guardar el Superblock utilizando el Part_start como el offset
+	err = sb.Encode(file, int64(partition.Part_start)) // Usar Part_start como offset
+	if err != nil {
+		return fmt.Errorf("error guardando el Superblock: %v", err)
 	}
 
 	// Mostrar mensaje de éxito

@@ -38,7 +38,6 @@ func (sb *Superblock) Decode(file *os.File, offset int64) error {
 	return utilidades.ReadFromFile(file, offset, sb)
 }
 
-// CreateUsersFile crea el archivo users.txt que contendrá la información de los usuarios
 func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	// ----------- Crear Inodo Raíz -----------
 	rootInode := &Inode{
@@ -53,28 +52,20 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 		I_perm:  [3]byte{'7', '7', '7'},
 	}
 
-	// Escribir el inodo raíz
-	err := utilidades.WriteToFile(file, int64(sb.S_first_ino), rootInode)
+	// Escribir el inodo raíz (inodo 0)
+	err := utilidades.WriteToFile(file, int64(sb.S_inode_start), rootInode)
 	if err != nil {
 		return fmt.Errorf("error al escribir el inodo raíz: %w", err)
 	}
 
-	// Actualizar bitmap de inodos
-	err = sb.UpdateBitmapInode(file)
+	// Actualizar bitmap de inodos (índice 0)
+	err = sb.UpdateBitmapInode(file, 0, true)
 	if err != nil {
 		return fmt.Errorf("error al actualizar bitmap de inodos: %w", err)
 	}
 
 	// Actualizar el contador de inodos y el puntero al primer inodo libre
-	sb.S_inodes_count++
-	sb.S_free_inodes_count--
-	sb.S_first_ino += sb.S_inode_size
-
-	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_first_ino))
-	if err != nil {
-		return fmt.Errorf("error al guardar el Superblock: %w", err)
-	}
+	sb.UpdateSuperblockAfterInodeAllocation()
 
 	// ----------- Crear Bloque Raíz (/ carpeta) -----------
 	rootBlock := &FolderBlock{
@@ -87,36 +78,23 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 	}
 
 	// Escribir el bloque raíz
-	err = utilidades.WriteToFile(file, int64(sb.S_first_blo), rootBlock)
+	err = utilidades.WriteToFile(file, int64(sb.S_block_start), rootBlock)
 	if err != nil {
 		return fmt.Errorf("error al escribir el bloque raíz: %w", err)
 	}
 
-	// Actualizar bitmap de bloques
-	err = sb.UpdateBitmapBlock(file)
+	// Actualizar bitmap de bloques (índice 0)
+	err = sb.UpdateBitmapBlock(file, 0, true)
 	if err != nil {
 		return fmt.Errorf("error al actualizar el bitmap de bloques: %w", err)
 	}
 
 	// Actualizar el contador de bloques y el puntero al primer bloque libre
-	sb.S_blocks_count++
-	sb.S_free_blocks_count--
-	sb.S_first_blo += sb.S_block_size
+	sb.UpdateSuperblockAfterBlockAllocation()
 
-	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_first_blo))
-	if err != nil {
-		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque raíz: %w", err)
-	}
-
-	// ----------- Crear Inodo para /users.txt -----------
-	// Crear usuarios y grupos utilizando la estructura User
-	// Crear grupo root
+	// ----------- Crear Inodo para /users.txt (inodo 1) -----------
 	rootGroup := NewGroup("1", "root")
-	// Crear usuario root
 	rootUser := NewUser("1", "root", "root", "123")
-
-	// Concatenar la información de usuarios y grupos
 	usersText := fmt.Sprintf("%s\n%s\n", rootGroup.ToString(), rootUser.ToString())
 
 	usersInode := &Inode{
@@ -126,60 +104,44 @@ func (sb *Superblock) CreateUsersFile(file *os.File) error {
 		I_atime: float32(time.Now().Unix()),
 		I_ctime: float32(time.Now().Unix()),
 		I_mtime: float32(time.Now().Unix()),
-		I_block: [15]int32{sb.S_blocks_count, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, // Apunta al bloque de users.txt
-		I_type:  [1]byte{'1'},                                                                         // Tipo archivo
+		I_block: [15]int32{1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, // Apunta al bloque 1 (users.txt)
+		I_type:  [1]byte{'1'},                                                         // Tipo archivo
 		I_perm:  [3]byte{'7', '7', '7'},
 	}
 
-	// Escribir el inodo de users.txt
-	err = utilidades.WriteToFile(file, int64(sb.S_first_ino), usersInode)
+	// Escribir el inodo de users.txt (inodo 1)
+	err = utilidades.WriteToFile(file, int64(sb.S_inode_start+int32(binary.Size(usersInode))), usersInode)
 	if err != nil {
 		return fmt.Errorf("error al escribir el inodo de users.txt: %w", err)
 	}
 
-	// Actualizar bitmap de inodos
-	err = sb.UpdateBitmapInode(file)
+	// Actualizar bitmap de inodos (índice 1)
+	err = sb.UpdateBitmapInode(file, 1, true)
 	if err != nil {
 		return fmt.Errorf("error al actualizar bitmap de inodos para users.txt: %w", err)
 	}
 
 	// Actualizar el contador de inodos y el puntero al primer inodo libre
-	sb.S_inodes_count++
-	sb.S_free_inodes_count--
-	sb.S_first_ino += sb.S_inode_size
+	sb.UpdateSuperblockAfterInodeAllocation()
 
-	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_first_ino))
-	if err != nil {
-		return fmt.Errorf("error al guardar el Superblock después de la creación del inodo de users.txt: %w", err)
-	}
-
-	// ----------- Crear Bloque para users.txt -----------
+	// ----------- Crear Bloque para users.txt (bloque 1) -----------
 	usersBlock := &FileBlock{}
 	copy(usersBlock.B_content[:], usersText)
 
 	// Escribir el bloque de users.txt
-	err = utilidades.WriteToFile(file, int64(sb.S_first_blo), usersBlock)
+	err = utilidades.WriteToFile(file, int64(sb.S_block_start+int32(binary.Size(usersBlock))), usersBlock)
 	if err != nil {
 		return fmt.Errorf("error al escribir el bloque de users.txt: %w", err)
 	}
 
-	// Actualizar el bitmap de bloques
-	err = sb.UpdateBitmapBlock(file)
+	// Actualizar el bitmap de bloques (índice 1)
+	err = sb.UpdateBitmapBlock(file, 1, true)
 	if err != nil {
 		return fmt.Errorf("error al actualizar el bitmap de bloques para users.txt: %w", err)
 	}
 
 	// Actualizar el contador de bloques y el puntero al primer bloque libre
-	sb.S_blocks_count++
-	sb.S_free_blocks_count--
-	sb.S_first_blo += sb.S_block_size
-
-	// Guardar el Superblock actualizado
-	err = sb.Encode(file, int64(sb.S_first_blo))
-	if err != nil {
-		return fmt.Errorf("error al guardar el Superblock después de la creación del bloque de users.txt: %w", err)
-	}
+	sb.UpdateSuperblockAfterBlockAllocation()
 
 	fmt.Println("Archivo users.txt creado correctamente.")
 	fmt.Println("Superbloque después de la creación de users.txt:")
@@ -292,44 +254,182 @@ func (sb *Superblock) PrintBlocks(path string) error {
 	return nil
 }
 
+// FindNextFreeBlock busca el siguiente bloque libre y lo marca como ocupado
 func (sb *Superblock) FindNextFreeBlock(file *os.File) (int32, error) {
-	// Mover el puntero al inicio del bitmap de bloques
-	_, err := file.Seek(int64(sb.S_bm_block_start), 0)
-	if err != nil {
-		return -1, fmt.Errorf("error buscando el inicio del bitmap de bloques: %w", err)
-	}
+	totalBlocks := sb.S_blocks_count + sb.S_free_blocks_count // Número total de bloques
 
-	// Leer el bitmap de bloques en memoria
-	buffer := make([]byte, sb.S_free_blocks_count)
-	_, err = file.Read(buffer)
-	if err != nil {
-		return -1, fmt.Errorf("error leyendo el bitmap de bloques: %w", err)
-	}
+	for position := int32(0); position < totalBlocks; position++ {
+		isFree, err := sb.isBlockFree(file, sb.S_bm_block_start, position)
+		if err != nil {
+			return -1, fmt.Errorf("error buscando bloque libre: %w", err)
+		}
 
-	// Buscar el primer bloque libre ('0')
-	for i, bit := range buffer {
-		if bit == FreeBlock {
-			// Bloque libre encontrado
-			buffer[i] = OccupiedBlock
-
-			// Actualizar el bitmap en el archivo
-			if err := sb.updateBitmap(file, sb.S_bm_block_start, int32(i), OccupiedBlock); err != nil {
-				return -1, fmt.Errorf("error actualizando el bitmap de bloques: %w", err)
+		if isFree {
+			// Marcar el bloque como ocupado
+			err = sb.UpdateBitmapBlock(file, position, true)
+			if err != nil {
+				return -1, fmt.Errorf("error actualizando el bitmap del bloque: %w", err)
 			}
 
-			// Log opcional para confirmar el bloque asignado
-			fmt.Printf("Bloque asignado: %d\n", i)
-
 			// Devolver el índice del bloque libre encontrado
-			return int32(i), nil
+			fmt.Println("Indice encontrado:", position)
+			return position, nil
 		}
 	}
 
-	// Si no se encuentran bloques libres, devolver un error
+	// Si no hay bloques disponibles
 	return -1, fmt.Errorf("no hay bloques disponibles")
+}
+
+// FindNextFreeInode busca el siguiente inodo libre en el bitmap de inodos y lo marca como ocupado
+func (sb *Superblock) FindNextFreeInode(file *os.File) (int32, error) {
+	totalInodes := sb.S_inodes_count + sb.S_free_inodes_count // Número total de inodos
+
+	// Recorre todos los inodos en el bitmap
+	for position := int32(0); position < totalInodes; position++ {
+		// Verifica si el inodo está libre
+		isFree, err := sb.isInodeFree(file, sb.S_bm_inode_start, position)
+		if err != nil {
+			return -1, fmt.Errorf("error buscando inodo libre en la posición %d: %w", position, err)
+		}
+
+		// Si encontramos un inodo libre
+		if isFree {
+			// Marcar el inodo como ocupado
+			err = sb.UpdateBitmapInode(file, position, true)
+			if err != nil {
+				return -1, fmt.Errorf("error actualizando el bitmap del inodo en la posición %d: %w", position, err)
+			}
+			// Devolver la posición del inodo libre encontrado
+			fmt.Printf("Inodo libre encontrado y asignado: %d\n", position)
+			return position, nil
+		}
+	}
+
+	// Si no hay inodos disponibles
+	return -1, fmt.Errorf("no hay inodos disponibles")
+}
+
+// AssignNewBlock asigna un nuevo bloque al inodo en el índice especificado si es necesario
+func (sb *Superblock) AssignNewBlock(file *os.File, inode *Inode, index int) (int32, error) {
+	fmt.Println("=== Iniciando la asignación de un nuevo bloque ===")
+
+	// Validar que el índice esté dentro del rango de bloques válidos
+	if index < 0 || index >= len(inode.I_block) {
+		return -1, fmt.Errorf("índice de bloque fuera de rango: %d", index)
+	}
+
+	// Verificar si ya hay un bloque asignado en ese índice
+	if inode.I_block[index] != -1 {
+		return -1, fmt.Errorf("bloque en el índice %d ya está asignado: %d", index, inode.I_block[index])
+	}
+
+	// Intentar encontrar un bloque libre
+	newBlock, err := sb.FindNextFreeBlock(file)
+	if err != nil {
+		return -1, fmt.Errorf("error buscando nuevo bloque libre: %w", err)
+	}
+
+	// Verificar si se encontró un bloque libre
+	if newBlock == -1 {
+		return -1, fmt.Errorf("no hay bloques libres disponibles")
+	}
+
+	// Asignar el nuevo bloque en el índice especificado
+	inode.I_block[index] = newBlock
+	fmt.Printf("Nuevo bloque asignado: %d en I_block[%d]\n", newBlock, index)
+
+	// Actualizar el Superblock después de asignar el bloque
+	sb.UpdateSuperblockAfterBlockAllocation()
+
+	// Retornar el nuevo bloque asignado
+	return newBlock, nil
+}
+
+// AssignNewInode asigna un nuevo inodo pero no lo inicializa
+func (sb *Superblock) AssignNewInode(file *os.File, inode *Inode, index int) (int32, error) {
+	fmt.Println("=== Iniciando la asignación de un nuevo inodo ===")
+
+	// Validar que el índice esté dentro del rango de inodos válidos
+	if index < 0 || index >= len(inode.I_block) {
+		return -1, fmt.Errorf("índice de inodo fuera de rango: %d", index)
+	}
+
+	// Verificar si ya hay un inodo asignado en ese índice
+	if inode.I_block[index] != -1 {
+		return -1, fmt.Errorf("el inodo en el índice %d ya está asignado: %d", index, inode.I_block[index])
+	}
+
+	// Paso 1: Encontrar un inodo libre
+	newInodeIndex, err := sb.FindNextFreeInode(file)
+	if err != nil {
+		return -1, fmt.Errorf("error encontrando inodo libre: %w", err)
+	}
+
+	// Verificar si se encontró un inodo libre
+	if newInodeIndex == -1 {
+		return -1, fmt.Errorf("no hay inodos libres disponibles")
+	}
+
+	// Asignar el nuevo inodo en el índice especificado
+	inode.I_block[index] = newInodeIndex
+	fmt.Printf("Nuevo inodo asignado: %d en I_block[%d]\n", newInodeIndex, index)
+
+	// Paso 2: Actualizar el bitmap de inodos
+	err = sb.UpdateBitmapInode(file, newInodeIndex, true)
+	if err != nil {
+		return -1, fmt.Errorf("error actualizando el bitmap de inodos: %w", err)
+	}
+
+	// Paso 3: Actualizar el estado del superblock
+	sb.UpdateSuperblockAfterInodeAllocation()
+
+	// Retornar el índice del inodo asignado
+	return newInodeIndex, nil
+}
+
+// WriteInodeToFile escribe un inodo en la posición especificada del archivo
+func WriteInodeToFile(file *os.File, offset int64, inode *Inode) error {
+	// Mover el puntero al offset calculado
+	_, err := file.Seek(offset, 0)
+	if err != nil {
+		return fmt.Errorf("error buscando la posición para escribir el inodo: %w", err)
+	}
+
+	// Escribir el inodo en el archivo
+	err = binary.Write(file, binary.LittleEndian, inode)
+	if err != nil {
+		return fmt.Errorf("error escribiendo el inodo en el archivo: %w", err)
+	}
+
+	return nil
 }
 
 func (sb *Superblock) CalculateInodeOffset(inodeIndex int32) int64 {
 	// Calcula el desplazamiento en el archivo basado en el índice del inodo
 	return int64(sb.S_inode_start) + int64(inodeIndex)*int64(sb.S_inode_size)
+}
+
+// UpdateSuperblockAfterBlockAllocation actualiza el Superblock después de asignar un bloque
+func (sb *Superblock) UpdateSuperblockAfterBlockAllocation() {
+	// Incrementa el contador de bloques asignados
+	sb.S_blocks_count++
+
+	// Decrementa el contador de bloques libres
+	sb.S_free_blocks_count--
+
+	// Actualiza el puntero al primer bloque libre
+	sb.S_first_blo += sb.S_block_size
+}
+
+// UpdateSuperblockAfterInodeAllocation actualiza el Superblock después de asignar un inodo
+func (sb *Superblock) UpdateSuperblockAfterInodeAllocation() {
+	// Incrementa el contador de inodos asignados
+	sb.S_inodes_count++
+
+	// Decrementa el contador de inodos libres
+	sb.S_free_inodes_count--
+
+	// Actualiza el puntero al primer inodo libre
+	sb.S_first_ino += sb.S_inode_size
 }

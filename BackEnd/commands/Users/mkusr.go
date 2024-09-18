@@ -104,15 +104,21 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock
-	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
+	// Cargar el Superblock y la partición utilizando la función GetMountedPartitionRep
+	mbr, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
 	}
 
+	// Obtener la partición montada
+	partition, err := mbr.GetPartitionByID(globals.UsuarioActual.Id)
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener la partición: %v", err)
+	}
+
 	// Leer el inodo de users.txt
 	var usersInode structs.Inode
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubuacion de los bloques de users.txt
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubicación de los bloques de users.txt
 	err = usersInode.Decode(file, inodeOffset)                              // Usar el descriptor de archivo
 	if err != nil {
 		return fmt.Errorf("error leyendo el inodo de users.txt: %v", err)
@@ -133,6 +139,7 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 	// Crear un nuevo objeto de tipo User
 	usuario := structs.NewUser(fmt.Sprintf("%d", sb.S_inodes_count+1), mkusr.Grp, mkusr.User, mkusr.Pass)
 	fmt.Println(usuario.ToString())
+
 	// Insertar la nueva entrada en el archivo users.txt
 	err = globals.InsertIntoUsersFile(file, sb, &usersInode, usuario.ToString())
 	if err != nil {
@@ -145,8 +152,16 @@ func commandMkusr(mkusr *MKUSR, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
+	// Guardar el Superblock usando el Part_start como el offset
+	err = sb.Encode(file, int64(partition.Part_start))
+	if err != nil {
+		return fmt.Errorf("error guardando el Superblock: %v", err)
+	}
+
 	// Mostrar mensaje de éxito
 	fmt.Fprintf(outputBuffer, "Usuario '%s' agregado exitosamente al grupo '%s'\n", mkusr.User, mkusr.Grp)
+	fmt.Println("\nSuperblock")
+	sb.Print()
 	fmt.Println("\nInodos")
 	sb.PrintInodes(file.Name())
 	fmt.Println("\nBloques")

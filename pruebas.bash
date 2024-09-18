@@ -23,13 +23,14 @@ mkgrp -name=administradores
 mkgrp -name=admin
 mkgrp -name=home
 mkgrp -name=prueba
+mkgrp -name=userz
+
 #Crear usuarios
 mkusr -user=keni -pass=123 -grp=usuarios
 mkusr -user=keneth -pass=123 -grp=admin
 #usuarios para usuarios
 mkusr -user=prueba -pass=123 -grp=usuarios
 mkusr -user=prueba2 -pass=123 -grp=usuarios
-mkusr -user=prueba -pass=123 -grp=pr #Error porque el grupo no existe
 mkusr -user=k99 -pass=123 -grp=prueba
 mkusr -user=keni -pass=123 -grp=home
 #Eliminar un grupo
@@ -56,6 +57,11 @@ login -user=keni -pass=123 -id=061A // Usuario aun no creado debe dar error
 
 # Crea el archivo 'archivo 1.txt' en la carpeta 'mis documentos'
 # No se crean carpetas adicionales, y el archivo tendrá 0 bytes de tamaño
+mkdir -path="/home"
+mkdir -path="/home/usac"
+mkdir -path="/home/work"
+mkdir -path="/home/usac/mia"
+mkfile -path="/home/usac/mia/1.txt"
 mkfile -path="/home/mis documentos/archivo 1.txt"
 
 mkfile -size=10 -path=/home/user/docs/a.txt

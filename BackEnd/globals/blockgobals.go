@@ -2,7 +2,6 @@ package globals
 
 import (
 	structs "backend/Structs"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"strings"
@@ -17,7 +16,7 @@ func ReadFileBlocks(file *os.File, sb *structs.Superblock, inode *structs.Inode)
 			break // No hay más bloques asignados
 		}
 
-		blockOffset := int64(sb.S_block_start + blockIndex*64) // Calcular la posición del bloque
+		blockOffset := int64(sb.S_block_start + blockIndex*int32(sb.S_block_size))
 		var fileBlock structs.FileBlock
 
 		// Leer el bloque desde el archivo
@@ -33,51 +32,9 @@ func ReadFileBlocks(file *os.File, sb *structs.Superblock, inode *structs.Inode)
 	// Actualizar el tiempo de último acceso
 	inode.UpdateAtime()
 
-	// Guardar el inodo actualizado en el archivo
-	inodeOffset := int64(sb.S_inode_start) + int64(inode.I_block[0])*int64(sb.S_inode_size)
-	err := inode.Encode(file, inodeOffset)
-	if err != nil {
-		return "", fmt.Errorf("error actualizando el inodo: %w", err)
-	}
-
 	return strings.TrimRight(contenido, "\x00"), nil
 }
 
-// assignNewBlock asigna un nuevo bloque al inodo si es necesario
-func assignNewBlock(file *os.File, sb *structs.Superblock, inode *structs.Inode) (int32, error) {
-	fmt.Println("=== Iniciando la asignación de un nuevo bloque ===")
-	for i := 0; i < len(inode.I_block); i++ {
-		if inode.I_block[i] == -1 {
-			// Asignar un nuevo bloque si no hay bloque actual
-			newBlock, err := sb.FindNextFreeBlock(file)
-			if err != nil {
-				return -1, fmt.Errorf("error asignando nuevo bloque: %w", err)
-			}
-
-			// Verificar si el bloque recién asignado es válido
-			if newBlock == -1 {
-				return -1, fmt.Errorf("bloque asignado inválido")
-			}
-
-			inode.I_block[i] = newBlock
-
-			// Actualizar el bitmap de bloques
-			if err := sb.UpdateBitmapBlock(file); err != nil {
-				return -1, fmt.Errorf("error actualizando bitmap de bloques: %w", err)
-			}
-
-			// Confirmar asignación del nuevo bloque
-			fmt.Printf("Nuevo bloque asignado: %d (índice I_block[%d])\n", newBlock, i)
-			return newBlock, nil //retornar el índice del bloque asignado
-		}
-
-	}
-	// Error si todos los bloques están llenos
-	fmt.Println("Error: Todos los bloques asignados están llenos, no hay más espacio en el inodo.")
-	return -1, fmt.Errorf("todos los bloques asignados están llenos")
-}
-
-// Funcion que escribe el contenido en los bloques de users.txt, recibe el archivo, el superbloque, el inodo y el nuevo contenido
 func WriteUsersBlocks(file *os.File, sb *structs.Superblock, inode *structs.Inode, nuevoContenido string) error {
 	// Leer el contenido actual de los bloques asignados al inodo
 	contenidoExistente, err := ReadFileBlocks(file, sb, inode)
@@ -88,51 +45,51 @@ func WriteUsersBlocks(file *os.File, sb *structs.Superblock, inode *structs.Inod
 	// Combinar el contenido existente con el nuevo contenido
 	contenidoTotal := contenidoExistente + nuevoContenido
 
-	// Obtener el tamaño actual del contenido existente
-	sizeContenidoExistente := len(contenidoExistente)
-
-	// Dividir el contenido total en bloques de 64 bytes
+	// Dividir el contenido total en bloques de tamaño BlockSize
 	blocks, err := structs.SplitContent(contenidoTotal)
 	if err != nil {
 		return fmt.Errorf("error al dividir el contenido en bloques: %w", err)
 	}
 
+	// Variable para mantener el índice del bloque
+	index := 0
+
 	// Iterar sobre los bloques generados y escribirlos en los bloques del inodo
-	for i, block := range blocks {
-		// Si hemos alcanzado el límite de bloques asignados al inodo, necesitamos asignar un nuevo bloque
-		if i >= len(inode.I_block) || inode.I_block[i] == -1 {
-			// Intentar asignar un nuevo bloque al inodo
-			newBlockIndex, err := assignNewBlock(file, sb, inode)
+	for _, block := range blocks {
+		// Verificar si el índice excede la capacidad del array I_block
+		if index >= len(inode.I_block) {
+			return fmt.Errorf("se alcanzó el límite máximo de bloques del inodo")
+		}
+
+		// Si el bloque actual en el inodo está vacío, asignar uno nuevo
+		if inode.I_block[index] == -1 {
+			newBlockIndex, err := sb.AssignNewBlock(file, inode, index)
 			if err != nil {
 				return fmt.Errorf("error asignando nuevo bloque: %w", err)
 			}
-			inode.I_block[i] = newBlockIndex
+			inode.I_block[index] = newBlockIndex
 		}
 
 		// Calcular el offset del bloque en el archivo
-		blockOffset := int64(sb.S_block_start + inode.I_block[i]*64)
+		blockOffset := int64(sb.S_block_start + inode.I_block[index]*int32(sb.S_block_size))
 
 		// Escribir el contenido del bloque en la partición
 		err = block.Encode(file, blockOffset)
 		if err != nil {
-			return fmt.Errorf("error escribiendo el bloque %d: %w", inode.I_block[i], err)
+			return fmt.Errorf("error escribiendo el bloque %d: %w", inode.I_block[index], err)
 		}
+
+		// Mover al siguiente bloque
+		index++
 	}
 
-	// Incrementar el tamaño del archivo en el inodo (i_size)
-	nuevoTamano := sizeContenidoExistente + len(nuevoContenido)
+	// Actualizar el tamaño del archivo en el inodo (i_size)
+	nuevoTamano := len(contenidoTotal)
 	inode.I_size = int32(nuevoTamano)
 
 	// Actualizar los tiempos de modificación y cambio
 	inode.UpdateMtime()
 	inode.UpdateCtime()
-
-	// Guardar los cambios del inodo en el archivo
-	inodeOffset := int64(sb.S_inode_start) + int64(inode.I_block[0])*int64(sb.S_inode_size)
-	err = inode.Encode(file, inodeOffset)
-	if err != nil {
-		return fmt.Errorf("error actualizando el inodo: %w", err)
-	}
 
 	return nil
 }
@@ -220,13 +177,6 @@ func InsertIntoUsersFile(file *os.File, sb *structs.Superblock, inode *structs.I
 	// Actualizar tiempos de modificación y cambio
 	inode.UpdateMtime()
 	inode.UpdateCtime()
-
-	// Guardar el inodo actualizado en el archivo
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(*inode)))
-	err = inode.Encode(file, inodeOffset)
-	if err != nil {
-		return fmt.Errorf("error actualizando inodo: %w", err)
-	}
 
 	return nil
 }

@@ -14,8 +14,8 @@ type FolderBlock struct {
 
 // FolderContent representa el contenido dentro de un bloque de carpeta
 type FolderContent struct {
-	B_name  [12]byte
-	B_inodo int32
+	B_name  [12]byte // Nombre del archivo o carpeta
+	B_inodo int32    // Número de inodo al que apunta
 	// Total: 16 bytes
 }
 

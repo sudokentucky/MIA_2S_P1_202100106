@@ -59,7 +59,7 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("solo el usuario root puede ejecutar este comando")
 	}
 
-	// Verificar que la partición está montada
+	// Verificar que la partición esté montada
 	_, path, err := globals.GetMountedPartition(globals.UsuarioActual.Id)
 	if err != nil {
 		return fmt.Errorf("no se puede encontrar la partición montada: %v", err)
@@ -72,16 +72,22 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 	}
 	defer file.Close()
 
-	// Cargar el Superblock utilizando el descriptor del archivo
-	_, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id)
+	// Cargar el Superblock y la partición
+	mbr, sb, _, err := globals.GetMountedPartitionRep(globals.UsuarioActual.Id) //Id de la particion del usuario actual
 	if err != nil {
 		return fmt.Errorf("no se pudo cargar el Superblock: %v", err)
 	}
 
+	// Obtener la partición asociada al id
+	partition, err := mbr.GetPartitionByID(globals.UsuarioActual.Id)
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener la partición: %v", err)
+	}
+
 	// Leer el inodo de users.txt
-	var usersInode structs.Inode
+	var usersInode structs.Inode // Inodo de users.txt
 	// Calcular el offset del inodo de users.txt, esta en el inodo 1
-	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) //ubuacion de los bloques de users.txt
+	inodeOffset := int64(sb.S_inode_start + int32(binary.Size(usersInode))) // Ubicación de los bloques de users.txt
 	// Decodificar el inodo de users.txt
 	err = usersInode.Decode(file, inodeOffset)
 	usersInode.UpdateAtime() // Actualizar la última fecha de acceso
@@ -117,8 +123,20 @@ func commandMkgrp(mkgrp *MKGRP, outputBuffer *bytes.Buffer) error {
 		return fmt.Errorf("error actualizando inodo de users.txt: %v", err)
 	}
 
-	fmt.Fprintf(outputBuffer, "Grupo creado exitosamente: %s\n", mkgrp.Name)
+	// Guardar el Superblock utilizando el Part_start como el offset
+	err = sb.Encode(file, int64(partition.Part_start)) // Guardar en Part_start
+	if err != nil {
+		return fmt.Errorf("error guardando el Superblock: %v", err)
+	} else {
+		fmt.Println("\nSuperbloque guardado correctamente") // Mensaje de éxito
+		sb.Print()
+		fmt.Println("\nInodos")
+		sb.PrintInodes(file.Name())
+		sb.PrintBlocks(file.Name())
 
+	}
+
+	fmt.Fprintf(outputBuffer, "Grupo creado exitosamente: %s\n", mkgrp.Name)
 	fmt.Fprintf(outputBuffer, "===========================================================")
 	return nil
 }

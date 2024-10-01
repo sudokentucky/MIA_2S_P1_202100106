@@ -12,6 +12,8 @@ import (
 // ConvertToBytes convierte un tamaño y una unidad a bytes
 func ConvertToBytes(size int, unit string) (int, error) {
 	switch unit {
+	case "B":
+		return size, nil // Devuelve el tamaño en bytes
 	case "K":
 		return size * 1024, nil // Convierte kilobytes a bytes
 	case "M":

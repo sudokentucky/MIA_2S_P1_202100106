@@ -25,9 +25,63 @@ Este proyecto se divide en dos partes: **Frontend** (React + Vite + TailwindCSS)
 - **ESLint**: Análisis estático para mantener un código consistente.  
 - **PostCSS** / **Autoprefixer**: Procesamiento de CSS para compatibilidad entre navegadores.  
 
+#### Instalacion React & Vite
+
+```bash
+#Utiliar el empaquetador de preferencia en este caso npm
+npm install -D vite
+#Crear el proyecto
+npm create vite@latest
+#Entrar a la carpeta creada e instalar las dependencias
+npm install
+#Iniciar el servidor
+npm run dev
+```
+
+#### Tailwindcss
+
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+Se va a crear un archivo tailwind.config.js en la raíz del proyecto. En este archivo se pueden configurar los estilos de tailwindcss. Se debe agregar el siguiente código:
+
+```bash
+#Archivo tailwind.config.js
+content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+```
+
+Por último se debe importar tailwindcss en el archivo index.css:
+
+```bash
+/* Archivo index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
 ### Backend
 
 - **Go (Golang)**: Lenguaje de programación de alto rendimiento para la lógica del lado del servidor.  
 - **Fiber**: Framework web rápido y minimalista para construir APIs.  
+
+#### Instalacion Fiber
+
+```bash
+#Iniciar el modulo de Go en el proyecto
+go mod init backend
+#Se instala el framework de Go (Fiber)
+go get -u github.com/gofiber/fiber/v2
+#Iniciar el servidor de desarrollo con el siguiente comando
+go run main.go
+```
+
+### Ejecucion del Proyecto
+
+- Luego de iniciar los entornos tanto de frontend como backend,abra <http://localhost:3000> para el servidor (Esto util para probar endpoints o ver el backend sin la interfaz grafica) y <http://localhost:5173> para ver la aplicación en el navegador.
 
 ---

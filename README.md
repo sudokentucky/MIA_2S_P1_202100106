@@ -16,6 +16,7 @@ Este proyecto ofrece una interfaz de usuario creada con React para gestionar y e
 <p align="center">
   <img src="assets/Ext.png" alt="Sistema de Archivos" title="Ext3" width="700"tyle="margin: 0 15px;">
 </p>
+
 ## Tecnologías y dependencias
 
 <p align="center">
